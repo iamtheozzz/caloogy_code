@@ -136,7 +136,7 @@ async function showBanner() {
         n++;
         if (n % 3 === 0) particles = mkParticles(n);
         const lines = frame(n, particles);
-        process.stdout.write('\x1b[H' + lines.join('\n'));
+        process.stdout.write('\x1b[2J\x1b[H' + lines.join('\n'));
     };
 
     // Initial draw
