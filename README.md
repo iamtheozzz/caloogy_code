@@ -120,21 +120,6 @@ caloogy -r
 
 ---
 
-## Configuration
-
-Your settings are stored at `~/.caloogy-config.json`. You can edit this file directly or run `caloogy --reconfigure` to change them interactively.
-
-Example config file:
-```json
-{
-  "provider": "gemini",
-  "key": "YOUR_API_KEY",
-  "model": "gemini-1.5-flash"
-}
-```
-
----
-
 ## Privacy
 
 - Market data is fetched directly from OKX / Binance — no data passes through any third-party server
