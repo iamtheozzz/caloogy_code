@@ -60,22 +60,30 @@
     }
 
     /* ── Theme toggle ── */
-    .cc-theme-btn {
+    .cc-theme-seg {
       display: flex;
       align-items: center;
-      gap: 7px;
-      background: none;
-      border: 1px solid var(--border-color);
-      border-radius: 20px;
-      padding: 5px 12px 5px 10px;
-      cursor: pointer;
-      color: var(--text-secondary);
-      font-size: 12px;
-      font-family: inherit;
-      transition: border-color 0.15s, color 0.15s;
+      background: var(--border-color);
+      border-radius: 7px;
+      padding: 2px;
     }
-    .cc-theme-btn:hover { border-color: var(--text-secondary); color: var(--text-primary); }
-    .cc-theme-icon { font-size: 14px; line-height: 1; }
+    .cc-theme-seg button {
+      border: none;
+      background: transparent;
+      border-radius: 5px;
+      padding: 4px 13px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      letter-spacing: 0.02em;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .cc-theme-seg button.cc-seg-active {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
@@ -107,34 +115,34 @@
     </svg>
     <span class="cc-nav-wordmark">Caloogy <span>AI</span></span>
   </a>
-  <button class="cc-theme-btn" id="ccThemeBtn">
-    <span class="cc-theme-icon" id="ccThemeIcon">☀️</span>
-    <span id="ccThemeLabel">Light</span>
-  </button>
+  <div class="cc-theme-seg">
+    <button id="ccSegLight">Light</button>
+    <button id="ccSegDark">Dark</button>
+  </div>
 </nav>
 
 <script>
   (function() {
-    var btn   = document.getElementById('ccThemeBtn');
-    var icon  = document.getElementById('ccThemeIcon');
-    var label = document.getElementById('ccThemeLabel');
+    var btnLight = document.getElementById('ccSegLight');
+    var btnDark  = document.getElementById('ccSegDark');
     var isDark = (localStorage.getItem('cc-theme') || 'dark') === 'dark';
 
     function apply(dark) {
       if (dark) {
         document.documentElement.removeAttribute('data-theme');
-        icon.textContent  = '☀️';
-        label.textContent = 'Light';
+        btnDark.classList.add('cc-seg-active');
+        btnLight.classList.remove('cc-seg-active');
       } else {
         document.documentElement.setAttribute('data-theme', 'light');
-        icon.textContent  = '🌙';
-        label.textContent = 'Dark';
+        btnLight.classList.add('cc-seg-active');
+        btnDark.classList.remove('cc-seg-active');
       }
       localStorage.setItem('cc-theme', dark ? 'dark' : 'light');
     }
 
     apply(isDark);
-    btn.addEventListener('click', function() { isDark = !isDark; apply(isDark); });
+    btnLight.addEventListener('click', function() { isDark = false; apply(false); });
+    btnDark.addEventListener('click',  function() { isDark = true;  apply(true);  });
   })();
 </script>
 
