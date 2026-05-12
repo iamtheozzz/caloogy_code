@@ -26,6 +26,7 @@
       color: var(--text-primary);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 13px;
+      font-weight: 500;
     }
 
     /* ── Nav bar ── */
@@ -479,7 +480,12 @@
 
 <script src="quant.js"></script>
 <script>
-  if (typeof window._initQuantTab === 'function') window._initQuantTab();
+  if (typeof window._initQuantTab === 'function') {
+    window._initQuantTab();
+    document.getElementById('quantRsiToggle').click();
+    document.getElementById('quantMacdToggle').click();
+    document.getElementById('quantAiToggle').click();
+  }
 </script>
 </body>
 </html>
