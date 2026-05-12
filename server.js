@@ -105,6 +105,20 @@ function findFreePort(start) {
 function startServer(cfg) {
     const app = express();
     app.use(express.json({ limit: '2mb' }));
+
+    // Reject requests not originating from localhost
+    app.use('/api', (req, res, next) => {
+        const origin = req.headers.origin || '';
+        const host   = req.headers.host   || '';
+        const isLocal = !origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+        const isLocalHost = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host);
+        if (!isLocal || !isLocalHost) {
+            res.status(403).json({ error: 'Forbidden' });
+            return;
+        }
+        next();
+    });
+
     app.use(express.static(path.join(__dirname, 'public')));
 
     app.post('/api/ai/chat', async (req, res) => {
@@ -130,17 +144,21 @@ function startServer(cfg) {
 
     // Allow re-running setup: POST /api/reset-config
     app.post('/api/reset-config', (req, res) => {
-        const os   = require('os');
-        const fs   = require('fs');
+        const os      = require('os');
+        const fs      = require('fs');
         const cfgPath = require('path').join(os.homedir(), '.caloogy-config.json');
         try { fs.unlinkSync(cfgPath); } catch {}
         res.json({ ok: true });
-        setTimeout(() => process.exit(0), 200);
+        setTimeout(() => {
+            server.close(() => process.exit(0));
+            setTimeout(() => process.exit(0), 1000); // force-exit fallback
+        }, 200);
     });
 
+    let server;
     return new Promise((resolve, reject) => {
         findFreePort(3000).then(port => {
-            app.listen(port, () => resolve(port));
+            server = app.listen(port, () => resolve(port));
         }).catch(reject);
     });
 }

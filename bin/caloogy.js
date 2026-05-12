@@ -190,7 +190,7 @@ function readConfig() {
     catch { return null; }
 }
 function saveConfig(cfg) {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf8');
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), { encoding: 'utf8', mode: 0o600 });
 }
 function ask(iface, q) { return new Promise(r => iface.question(q, r)); }
 
