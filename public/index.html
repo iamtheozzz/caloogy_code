@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caloogy Code</title>
+  <style>
+    :root {
+      --bg-primary:    #000000;
+      --bg-secondary:  #000000;
+      --text-primary:  #e0e0e0;
+      --text-secondary:#aaaaaa;
+      --border-color:  #2a2a2a;
+    }
+    [data-theme="light"] {
+      --bg-primary:    #f5f5f0;
+      --bg-secondary:  #f5f5f0;
+      --text-primary:  #1a1a1a;
+      --text-secondary:#555555;
+      --border-color:  #d8d8d0;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5/lib/codemirror.css">
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5/lib/codemirror.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5/mode/javascript/javascript.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+  <link rel="stylesheet" href="quant.css">
+</head>
+<body class="nav-quant">
+
+<script>
+  /* Bypass auth gate — local mode always authenticated */
+  window.caloogyUser = { uid: 'local', displayName: 'Local User' };
+  window.showAuthModal = function() {};
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- Quant Section                                                          -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<section class="quant-section" id="quantSection">
+
+  <!-- ── Toolbar ── -->
+  <div class="qt-bar">
+    <div class="qt-bar-left">
+      <div class="qt-group" id="quantSymbolPills">
+        <button class="quant-pill active" data-val="BTCUSDT">BTC</button>
+        <button class="quant-pill" data-val="ETHUSDT">ETH</button>
+        <button class="quant-pill" data-val="SOLUSDT">SOL</button>
+        <button class="quant-pill" data-val="BNBUSDT">BNB</button>
+        <button class="qt-expand-btn" id="quantMoreAssetsBtn" title="More assets">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </div>
+      <div class="qt-sep"></div>
+      <div class="qt-group" id="quantIntervalPills">
+        <button class="quant-pill active" data-val="1H">1H</button>
+        <button class="quant-pill" data-val="4H">4H</button>
+        <button class="quant-pill" data-val="1D">1D</button>
+        <button class="quant-pill" data-val="1W">1W</button>
+      </div>
+      <div class="qt-sep"></div>
+      <label class="qt-ind-ctrl">
+        <input type="checkbox" id="quantSmaOn" checked>
+        <span class="qt-ind-name">SMA</span>
+        <input type="range" id="quantSmaPeriod" min="5" max="200" value="20" class="qt-slider">
+        <span class="qt-num" id="quantSmaVal">20</span>
+      </label>
+      <label class="qt-ind-ctrl">
+        <input type="checkbox" id="quantEmaOn" checked>
+        <span class="qt-ind-name">EMA</span>
+        <input type="range" id="quantEmaPeriod" min="5" max="200" value="50" class="qt-slider">
+        <span class="qt-num" id="quantEmaVal">50</span>
+      </label>
+      <label class="qt-ind-ctrl">
+        <input type="checkbox" id="quantBbOn">
+        <span class="qt-ind-name">BB</span>
+        <input type="range" id="quantBbPeriod" min="5" max="50" value="20" class="qt-slider">
+        <span class="qt-num" id="quantBbVal">20</span>
+      </label>
+    </div>
+
+    <div class="qt-bar-right">
+      <div class="qt-sep"></div>
+      <div class="qt-group">
+        <button class="quant-strat-btn qt-strat active" data-strat="ma_cross" data-tip="MA Cross: Buy when fast EMA crosses above slow EMA (golden cross), sell on death cross.">MA Cross</button>
+        <button class="quant-strat-btn qt-strat" data-strat="rsi_bands" data-tip="RSI Bands: Buy when RSI rises above the oversold line (OS), sell when it falls below the overbought line (OB).">RSI Bands</button>
+        <button class="quant-strat-btn qt-strat" data-strat="bb_bounce" data-tip="BB Bounce: Buy when price bounces back above the lower Bollinger Band, sell when it breaks above the upper band.">BB Bounce</button>
+        <button class="qt-expand-btn" id="quantMoreStratsBtn" title="More strategies">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </div>
+      <div class="qt-params" id="stratPanelMaCross">
+        <label class="qt-param-ctrl">Fast
+          <input type="range" id="quantFastMa" min="3" max="50" value="10" class="qt-slider">
+          <span class="qt-num" id="quantFastMaVal">10</span>
+        </label>
+        <label class="qt-param-ctrl">Slow
+          <input type="range" id="quantSlowMa" min="10" max="200" value="30" class="qt-slider">
+          <span class="qt-num" id="quantSlowMaVal">30</span>
+        </label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelRsi">
+        <label class="qt-param-ctrl">OB
+          <input type="range" id="quantRsiOb" min="60" max="90" value="70" class="qt-slider">
+          <span class="qt-num" id="quantRsiObVal">70</span>
+        </label>
+        <label class="qt-param-ctrl">OS
+          <input type="range" id="quantRsiOs" min="10" max="40" value="30" class="qt-slider">
+          <span class="qt-num" id="quantRsiOsVal">30</span>
+        </label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelBb">
+        <label class="qt-param-ctrl">Period
+          <input type="range" id="quantBbStratPeriod" min="10" max="50" value="20" class="qt-slider">
+          <span class="qt-num" id="quantBbStratPeriodVal">20</span>
+        </label>
+      </div>
+      <div class="qt-sep"></div>
+      <div class="qt-group">
+        <button class="qt-sub-toggle qt-ai-toggle" id="quantAiToggle">AI</button>
+        <button class="qt-sub-toggle" id="quantRsiToggle">RSI</button>
+        <button class="qt-sub-toggle" id="quantMacdToggle">MACD</button>
+      </div>
+      <button class="qt-run" id="quantRunBacktest">Backtest</button>
+    </div>
+  </div>
+
+  <!-- ── More assets dropdown ── -->
+  <div class="qt-dropdown quant-hidden" id="quantMoreAssetsPanel">
+    <span class="qt-dropdown-label">More</span>
+    <div class="qt-group" id="quantExtraSymbolPills">
+      <button class="quant-pill" data-val="XRPUSDT">XRP</button>
+      <button class="quant-pill" data-val="DOGEUSDT">DOGE</button>
+      <button class="quant-pill" data-val="ADAUSDT">ADA</button>
+      <button class="quant-pill" data-val="AVAXUSDT">AVAX</button>
+      <button class="quant-pill" data-val="LINKUSDT">LINK</button>
+      <button class="quant-pill" data-val="DOTUSDT">DOT</button>
+      <button class="quant-pill" data-val="UNIUSDT">UNI</button>
+      <button class="quant-pill" data-val="LTCUSDT">LTC</button>
+      <button class="quant-pill" data-val="ATOMUSDT">ATOM</button>
+      <button class="quant-pill" data-val="NEARUSDT">NEAR</button>
+      <button class="quant-pill" data-val="APTUSDT">APT</button>
+      <button class="quant-pill" data-val="ARBUSDT">ARB</button>
+      <button class="quant-pill" data-val="OPUSDT">OP</button>
+      <button class="quant-pill" data-val="SUIUSDT">SUI</button>
+      <button class="quant-pill" data-val="TRXUSDT">TRX</button>
+      <button class="quant-pill" data-val="MATICUSDT">MATIC</button>
+      <button class="quant-pill" data-val="FILUSDT">FIL</button>
+      <button class="quant-pill" data-val="ICPUSDT">ICP</button>
+      <button class="quant-pill" data-val="INJUSDT">INJ</button>
+      <button class="quant-pill" data-val="TONUSDT">TON</button>
+      <button class="quant-pill" data-val="PEPEUSDT">PEPE</button>
+      <button class="quant-pill" data-val="SHIBUSDT">SHIB</button>
+      <button class="quant-pill" data-val="WIFUSDT">WIF</button>
+      <button class="quant-pill" data-val="JUPUSDT">JUP</button>
+      <button class="quant-pill" data-val="BONKUSDT">BONK</button>
+      <button class="quant-pill" data-val="RENDERUSDT">RENDER</button>
+      <button class="quant-pill" data-val="FETUSDT">FET</button>
+      <button class="quant-pill" data-val="HBARUSDT">HBAR</button>
+      <button class="quant-pill" data-val="VETUSDT">VET</button>
+    </div>
+  </div>
+
+  <!-- ── More strategies dropdown ── -->
+  <div class="qt-dropdown quant-hidden" id="quantMoreStratsPanel">
+    <div class="qt-dropdown-strats">
+      <span class="qt-dropdown-label">More</span>
+      <div class="qt-group">
+        <button class="quant-strat-btn qt-strat" data-strat="rsi_bands" data-tip="RSI Bands">RSI Bands</button>
+        <button class="quant-strat-btn qt-strat" data-strat="bb_bounce" data-tip="BB Bounce">BB Bounce</button>
+        <button class="quant-strat-btn qt-strat" data-strat="macd" data-tip="MACD Cross">MACD</button>
+        <button class="quant-strat-btn qt-strat" data-strat="donchian" data-tip="Donchian Breakout">Donchian</button>
+        <button class="quant-strat-btn qt-strat" data-strat="mean_rev" data-tip="Mean Reversion">Mean Rev</button>
+        <button class="quant-strat-btn qt-strat" data-strat="stoch" data-tip="Stochastic">Stochastic</button>
+        <button class="quant-strat-btn qt-strat" data-strat="supertrend" data-tip="Supertrend">Supertrend</button>
+        <button class="quant-strat-btn qt-strat" data-strat="cci" data-tip="CCI">CCI</button>
+        <button class="quant-strat-btn qt-strat" data-strat="roc" data-tip="Rate of Change">ROC</button>
+        <button class="quant-strat-btn qt-strat" data-strat="ichimoku" data-tip="Ichimoku TK Cross">Ichimoku</button>
+        <button class="quant-strat-btn qt-strat" data-strat="psar" data-tip="Parabolic SAR">Par. SAR</button>
+        <button class="quant-strat-btn qt-strat" data-strat="williams_r" data-tip="Williams %R">Williams %R</button>
+        <button class="quant-strat-btn qt-strat" data-strat="adx" data-tip="ADX">ADX</button>
+        <button class="quant-strat-btn qt-strat" data-strat="keltner" data-tip="Keltner Channel">Keltner</button>
+        <button class="quant-strat-btn qt-strat" data-strat="trix" data-tip="TRIX">TRIX</button>
+        <button class="quant-strat-btn qt-strat" data-strat="cmo" data-tip="CMO">CMO</button>
+        <button class="quant-strat-btn qt-strat" data-strat="hull" data-tip="Hull MA Cross">Hull MA</button>
+        <button class="quant-strat-btn qt-strat" data-strat="vwap" data-tip="VWAP Deviation">VWAP</button>
+        <button class="quant-strat-btn qt-strat" data-strat="obv" data-tip="OBV Trend">OBV</button>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelMacd">
+        <label class="qt-param-ctrl">Fast <input type="range" id="quantMacdFast" min="3" max="20" value="12" class="qt-slider"> <span class="qt-num" id="quantMacdFastVal">12</span></label>
+        <label class="qt-param-ctrl">Slow <input type="range" id="quantMacdSlow" min="10" max="50" value="26" class="qt-slider"> <span class="qt-num" id="quantMacdSlowVal">26</span></label>
+        <label class="qt-param-ctrl">Sig  <input type="range" id="quantMacdSig"  min="3" max="20" value="9"  class="qt-slider"> <span class="qt-num" id="quantMacdSigVal">9</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelDonchian">
+        <label class="qt-param-ctrl">Period <input type="range" id="quantDonchianPeriod" min="5" max="50" value="20" class="qt-slider"> <span class="qt-num" id="quantDonchianPeriodVal">20</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelMeanRev">
+        <label class="qt-param-ctrl">SMA  <input type="range" id="quantMrPeriod" min="10" max="100" value="20" class="qt-slider"> <span class="qt-num" id="quantMrPeriodVal">20</span></label>
+        <label class="qt-param-ctrl">Dev% <input type="range" id="quantMrDev"    min="1"  max="15"  value="3"  class="qt-slider"> <span class="qt-num" id="quantMrDevVal">3</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelStoch">
+        <label class="qt-param-ctrl">K  <input type="range" id="quantStochK"  min="5"  max="20" value="14" class="qt-slider"> <span class="qt-num" id="quantStochKVal">14</span></label>
+        <label class="qt-param-ctrl">D  <input type="range" id="quantStochD"  min="2"  max="7"  value="3"  class="qt-slider"> <span class="qt-num" id="quantStochDVal">3</span></label>
+        <label class="qt-param-ctrl">OB <input type="range" id="quantStochOb" min="60" max="90" value="80" class="qt-slider"> <span class="qt-num" id="quantStochObVal">80</span></label>
+        <label class="qt-param-ctrl">OS <input type="range" id="quantStochOs" min="10" max="40" value="20" class="qt-slider"> <span class="qt-num" id="quantStochOsVal">20</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelSupertrend">
+        <label class="qt-param-ctrl">Period <input type="range" id="quantStPeriod" min="5"  max="20" value="10" class="qt-slider"> <span class="qt-num" id="quantStPeriodVal">10</span></label>
+        <label class="qt-param-ctrl">Mult   <input type="range" id="quantStMult"   min="1"  max="6"  value="3"  class="qt-slider"> <span class="qt-num" id="quantStMultVal">3</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelCci">
+        <label class="qt-param-ctrl">Period <input type="range" id="quantCciPeriod" min="10" max="50"  value="20"  class="qt-slider"> <span class="qt-num" id="quantCciPeriodVal">20</span></label>
+        <label class="qt-param-ctrl">Thresh <input type="range" id="quantCciThresh" min="50" max="200" value="100" class="qt-slider"> <span class="qt-num" id="quantCciThreshVal">100</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelRoc">
+        <label class="qt-param-ctrl">Period <input type="range" id="quantRocPeriod" min="3" max="30" value="10" class="qt-slider"> <span class="qt-num" id="quantRocPeriodVal">10</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelIchimoku">
+        <label class="qt-param-ctrl">Tenkan <input type="range" id="quantIchiTenkan" min="5"  max="15" value="9"  class="qt-slider"> <span class="qt-num" id="quantIchiTenkanVal">9</span></label>
+        <label class="qt-param-ctrl">Kijun  <input type="range" id="quantIchiKijun"  min="20" max="40" value="26" class="qt-slider"> <span class="qt-num" id="quantIchiKijunVal">26</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelPsar">
+        <label class="qt-param-ctrl">Step <input type="range" id="quantSarStep" min="1" max="5"  value="2"  class="qt-slider"> <span class="qt-num" id="quantSarStepVal">0.02</span></label>
+        <label class="qt-param-ctrl">Max  <input type="range" id="quantSarMax"  min="10" max="30" value="20" class="qt-slider"> <span class="qt-num" id="quantSarMaxVal">0.20</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelWr">
+        <label class="qt-param-ctrl">Period <input type="range" id="quantWrPeriod" min="5"  max="20" value="14" class="qt-slider"> <span class="qt-num" id="quantWrPeriodVal">14</span></label>
+        <label class="qt-param-ctrl">OB     <input type="range" id="quantWrOb"     min="10" max="30" value="20" class="qt-slider"> <span class="qt-num" id="quantWrObVal">20</span></label>
+        <label class="qt-param-ctrl">OS     <input type="range" id="quantWrOs"     min="70" max="90" value="80" class="qt-slider"> <span class="qt-num" id="quantWrOsVal">80</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelAdx">
+        <label class="qt-param-ctrl">Period <input type="range" id="quantAdxPeriod" min="7"  max="20" value="14" class="qt-slider"> <span class="qt-num" id="quantAdxPeriodVal">14</span></label>
+        <label class="qt-param-ctrl">Thresh <input type="range" id="quantAdxThresh" min="15" max="40" value="25" class="qt-slider"> <span class="qt-num" id="quantAdxThreshVal">25</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelKeltner">
+        <label class="qt-param-ctrl">Period <input type="range" id="quantKcPeriod" min="10" max="30" value="20" class="qt-slider"> <span class="qt-num" id="quantKcPeriodVal">20</span></label>
+        <label class="qt-param-ctrl">Mult   <input type="range" id="quantKcMult"   min="1"  max="4"  value="2"  class="qt-slider"> <span class="qt-num" id="quantKcMultVal">2</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelTrix">
+        <label class="qt-param-ctrl">Period <input type="range" id="quantTrixPeriod" min="5" max="25" value="14" class="qt-slider"> <span class="qt-num" id="quantTrixPeriodVal">14</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelCmo">
+        <label class="qt-param-ctrl">Period <input type="range" id="quantCmoPeriod" min="5"  max="20" value="14" class="qt-slider"> <span class="qt-num" id="quantCmoPeriodVal">14</span></label>
+        <label class="qt-param-ctrl">Thresh <input type="range" id="quantCmoThresh" min="20" max="70" value="50" class="qt-slider"> <span class="qt-num" id="quantCmoThreshVal">50</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelHull">
+        <label class="qt-param-ctrl">Fast <input type="range" id="quantHullFast" min="5"  max="30" value="16" class="qt-slider"> <span class="qt-num" id="quantHullFastVal">16</span></label>
+        <label class="qt-param-ctrl">Slow <input type="range" id="quantHullSlow" min="20" max="80" value="49" class="qt-slider"> <span class="qt-num" id="quantHullSlowVal">49</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelVwap">
+        <label class="qt-param-ctrl">Period <input type="range" id="quantVwapPeriod" min="20" max="100" value="50" class="qt-slider"> <span class="qt-num" id="quantVwapPeriodVal">50</span></label>
+        <label class="qt-param-ctrl">Dev%   <input type="range" id="quantVwapThresh" min="1"  max="10"  value="2"  class="qt-slider"> <span class="qt-num" id="quantVwapThreshVal">2</span></label>
+      </div>
+      <div class="qt-params quant-hidden" id="stratPanelObv">
+        <label class="qt-param-ctrl">Signal <input type="range" id="quantObvPeriod" min="10" max="50" value="20" class="qt-slider"> <span class="qt-num" id="quantObvPeriodVal">20</span></label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Results strip ── -->
+  <div class="qt-results quant-hidden" id="quantResults">
+    <span class="qt-res-item">Return <b id="btReturn">—</b></span>
+    <span class="qt-res-sep"></span>
+    <span class="qt-res-item">Trades <b id="btTrades">—</b></span>
+    <span class="qt-res-sep"></span>
+    <span class="qt-res-item">Win Rate <b id="btWinRate">—</b></span>
+    <span class="qt-res-sep"></span>
+    <span class="qt-res-item">Max DD <b id="btMaxDD">—</b></span>
+  </div>
+
+  <!-- ── Charts ── -->
+  <div class="qt-quant-body" id="qtQuantBody">
+  <div class="qt-main-col">
+  <div class="quant-main" id="quantMain">
+    <div class="quant-loading" id="quantLoading">Loading…</div>
+    <div id="quantCandleDiv" class="quant-chart-div"></div>
+    <div class="qt-vdrag" id="qtVDrag"></div>
+    <div class="quant-sub-col" id="quantSubCol">
+      <div id="quantRsiDiv"  class="quant-chart-div quant-chart-rsi quant-hidden">
+        <div class="qt-hdrag-top"></div>
+      </div>
+      <div class="qt-hdrag" id="qtHDrag"></div>
+      <div id="quantMacdDiv" class="quant-chart-div quant-chart-macd quant-hidden">
+        <div class="qt-hdrag-top"></div>
+      </div>
+    </div>
+    <div id="quantEquityDiv" class="quant-chart-div quant-chart-equity quant-hidden"></div>
+  </div>
+
+  <!-- ── Strategy Builder ── -->
+  <div class="qt-sb-wrap" id="quantSbWrap">
+    <div class="qt-sb-hdr qt-sb-hdr-toggle" id="quantSbToggle">
+      <span class="qt-sb-title">Create your strategy</span>
+      <button class="qt-sb-reset quant-hidden" id="quantSbReset" title="Start over">↺ Start over</button>
+      <svg class="qt-sb-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="qt-sb-stage quant-hidden" id="quantSbStage"></div>
+  </div>
+
+  <!-- Caloogy Code editor -->
+  <div class="qt-pine-wrap" id="quantPineWrap">
+    <div class="qt-pine-hdr qt-pine-hdr-toggle open" id="quantPineToggle">
+      <span class="qt-pine-title">Caloogy Code</span>
+      <svg class="qt-sb-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="qt-pine-body" id="quantPineBody">
+      <div class="qt-pine-body-bar">
+        <select id="qtPineTemplate" class="qt-pine-select">
+          <option value="">Examples…</option>
+          <optgroup label="── Trend Following ──">
+            <option value="ema_cross">EMA Cross</option>
+            <option value="triple_ema">Triple EMA System</option>
+            <option value="adx_filter">ADX Trend Filter</option>
+            <option value="donchian_turtle">Donchian Breakout (Turtle)</option>
+          </optgroup>
+          <optgroup label="── Mean Reversion ──">
+            <option value="bb_bands">Bollinger Bands</option>
+            <option value="bb_squeeze">BB Squeeze (Keltner)</option>
+            <option value="zscore">Z-Score Reversion</option>
+            <option value="vwap_dev">VWAP Deviation</option>
+          </optgroup>
+          <optgroup label="── Momentum / Oscillator ──">
+            <option value="rsi_signal">RSI Signal</option>
+            <option value="macd_rsi">MACD × RSI Confluence</option>
+            <option value="supertrend_rsi">Supertrend + RSI Filter</option>
+            <option value="hull_momentum">Hull MA Momentum</option>
+          </optgroup>
+          <optgroup label="── Volume / Multi-Factor ──">
+            <option value="obv_confirm">OBV Trend Confirmation</option>
+            <option value="ichimoku">Ichimoku Cloud</option>
+          </optgroup>
+          <optgroup label="── Professional / Research ──">
+            <option value="linear_reg">Linear Regression Channel</option>
+            <option value="rsi_divergence">RSI Divergence Detector</option>
+            <option value="chandelier_exit">Chandelier Exit (ATR Stop)</option>
+            <option value="heikin_ashi">Heikin-Ashi Trend Filter</option>
+            <option value="volume_rsi">Volume-Weighted RSI</option>
+            <option value="multi_factor">Multi-Factor Composite</option>
+            <option value="williams_fractal">Williams Fractal + Alligator</option>
+            <option value="elder_impulse">Elder Impulse System</option>
+            <option value="inside_bar">Inside Bar Breakout</option>
+            <option value="mean_rev_backtest">Mean Reversion + Equity Curve</option>
+          </optgroup>
+        </select>
+        <button id="qtPineRun" class="qt-pine-run">&#9654; Run</button>
+      </div>
+      <div id="qtPineEditorRow">
+        <div id="qtPineEditor"></div>
+      </div>
+      <div id="qtPineStatus" class="qt-pine-status"></div>
+    </div>
+  </div>
+  </div><!-- /.qt-main-col -->
+
+  <!-- AI Chat panel -->
+  <div id="qtAiChat" class="qt-ai-chat" style="display:none">
+    <div class="qt-ai-msgs" id="qtAiMsgs"></div>
+    <div class="qt-ai-bar">
+      <textarea id="qtAiInput" class="qt-ai-input" placeholder="Ask Caloogy AI… (Shift+Enter for newline)" rows="2"></textarea>
+      <button id="qtAiSend" class="qt-ai-send">Send</button>
+    </div>
+    <button id="qtAiExit" class="qt-ai-exit">&#x2715; Close chat</button>
+  </div>
+  </div><!-- /.qt-quant-body -->
+
+</section>
+
+<script src="quant.js"></script>
+<script>
+  if (typeof window._initQuantTab === 'function') window._initQuantTab();
+</script>
+</body>
+</html>
