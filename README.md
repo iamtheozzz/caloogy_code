@@ -2,7 +2,7 @@
 
 Local crypto quant analysis tool — the same charting and AI code editor as [caloogy.com](https://caloogy.com), running entirely on your machine with your own AI API key.
 
-<!-- ![Caloogy Code screenshot](assets/screenshot-main.png) -->
+![Caloogy Code](assets/p2.png)
 
 ---
 
@@ -13,6 +13,8 @@ No install required — run directly with npx:
 ```bash
 npx github:iamtheozzz/caloogy_code
 ```
+
+![Terminal](assets/p1.png)
 
 On first run you'll be prompted to choose an AI provider and paste your API key. The browser opens automatically at `http://localhost:3000`.
 
@@ -68,18 +70,13 @@ Download Node.js: [nodejs.org](https://nodejs.org)
 
 ## Supported AI Providers
 
-| Provider | Model | Free Tier | Paid Pricing |
-|----------|-------|-----------|--------------|
-| **Google Gemini** *(recommended)* | gemini-1.5-flash | ✅ Yes — generous free tier | [aistudio.google.com/pricing](https://ai.google.dev/pricing) |
-| **OpenAI** | gpt-4o | ❌ No | ~$2.50 / 1M input tokens |
-| **Anthropic Claude** | claude-opus-4 | ❌ No | ~$15 / 1M input tokens |
+| Provider | Where to get a key |
+|----------|--------------------|
+| **Google Gemini** *(free tier available)* | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) |
+| **OpenAI** | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| **Anthropic Claude** | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
 
-Get your API key:
-- Gemini: [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
-- OpenAI: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-- Claude: [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)
-
-> **Cost:** Caloogy Code itself is completely free. You only pay for the AI API calls you make — Gemini's free tier is sufficient for most users.
+> **Cost:** Caloogy Code is completely free and open source. You only pay for the AI API calls you make — Gemini offers a generous free tier that is sufficient for most users.
 
 ---
 
@@ -110,8 +107,6 @@ caloogy -r
 ---
 
 ## Features
-
-<!-- ![Chart](assets/screenshot-chart.png) -->
 
 - **Live candlestick charts** — BTC, ETH, SOL, BNB and 29 more coins, powered by OKX & Binance public APIs
 - **Timeframes** — 1H, 4H, 1D, 1W
@@ -162,3 +157,9 @@ export PATH="$(npm prefix -g)/bin:$PATH"
 **AI error / model not found** — run `caloogy --reconfigure` to switch to a different model or provider.
 
 **Browser doesn't open automatically** — navigate manually to the URL printed in the terminal (e.g. `http://localhost:3000`).
+
+---
+
+## License
+
+MIT © [Caloogy](https://caloogy.com)
