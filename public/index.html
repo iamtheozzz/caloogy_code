@@ -27,6 +27,55 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 13px;
     }
+
+    /* ── Nav bar ── */
+    .cc-nav {
+      position: sticky;
+      top: 0;
+      height: 56px;
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 200;
+    }
+    .cc-nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      text-decoration: none;
+      color: var(--text-primary);
+    }
+    .cc-nav-wordmark {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      color: var(--text-primary);
+    }
+    .cc-nav-wordmark span {
+      color: #2563eb;
+      font-weight: 700;
+    }
+
+    /* ── Theme toggle ── */
+    .cc-theme-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: none;
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 5px 12px 5px 10px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .cc-theme-btn:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+    .cc-theme-icon { font-size: 14px; line-height: 1; }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
@@ -42,6 +91,51 @@
   /* Bypass auth gate — local mode always authenticated */
   window.caloogyUser = { uid: 'local', displayName: 'Local User' };
   window.showAuthModal = function() {};
+
+  /* Theme: persist in localStorage, default dark */
+  (function() {
+    var t = localStorage.getItem('cc-theme') || 'dark';
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  })();
+</script>
+
+<nav class="cc-nav">
+  <a class="cc-nav-logo" href="#">
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="26" height="26" rx="7" fill="#2563eb"/>
+      <path d="M17.5 9.5C16.5 8.2 15 7.5 13 7.5C9.96 7.5 7.5 9.96 7.5 13C7.5 16.04 9.96 18.5 13 18.5C15 18.5 16.5 17.8 17.5 16.5" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <span class="cc-nav-wordmark">Caloogy <span>AI</span></span>
+  </a>
+  <button class="cc-theme-btn" id="ccThemeBtn">
+    <span class="cc-theme-icon" id="ccThemeIcon">☀️</span>
+    <span id="ccThemeLabel">Light</span>
+  </button>
+</nav>
+
+<script>
+  (function() {
+    var btn   = document.getElementById('ccThemeBtn');
+    var icon  = document.getElementById('ccThemeIcon');
+    var label = document.getElementById('ccThemeLabel');
+    var isDark = (localStorage.getItem('cc-theme') || 'dark') === 'dark';
+
+    function apply(dark) {
+      if (dark) {
+        document.documentElement.removeAttribute('data-theme');
+        icon.textContent  = '☀️';
+        label.textContent = 'Light';
+      } else {
+        document.documentElement.setAttribute('data-theme', 'light');
+        icon.textContent  = '🌙';
+        label.textContent = 'Dark';
+      }
+      localStorage.setItem('cc-theme', dark ? 'dark' : 'light');
+    }
+
+    apply(isDark);
+    btn.addEventListener('click', function() { isDark = !isDark; apply(isDark); });
+  })();
 </script>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
