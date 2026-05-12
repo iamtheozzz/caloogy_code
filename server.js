@@ -35,15 +35,15 @@ function toOpenAIHistory(history, systemPrompt) {
 
 // ── AI providers ─────────────────────────────────────────────────────────────
 
-async function streamGemini(res, { key, message, cosplay, history }) {
+const GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+
+async function streamGemini(res, { key, model: modelOverride, message, cosplay, history }) {
     const { GoogleGenerativeAI } = require('@google/generative-ai');
-    const genai = new GoogleGenerativeAI(key);
-    const model = genai.getGenerativeModel({
-        model: 'gemini-2.0-flash',
-        systemInstruction: cosplay || undefined,
-    });
-    const chat = model.startChat({ history: history || [] });
-    const result = await chat.sendMessageStream(message);
+    const genai      = new GoogleGenerativeAI(key);
+    const modelName  = modelOverride || GEMINI_MODELS[0];
+    const model      = genai.getGenerativeModel({ model: modelName, systemInstruction: cosplay || undefined });
+    const chat       = model.startChat({ history: history || [] });
+    const result     = await chat.sendMessageStream(message);
     for await (const chunk of result.stream) {
         const text = chunk.text();
         if (text) sseChunk(res, text);
@@ -117,7 +117,7 @@ function startServer(cfg) {
         res.flushHeaders();
 
         try {
-            const args = { key: cfg.key, message, cosplay, history };
+            const args = { key: cfg.key, model: cfg.model, message, cosplay, history };
             if (cfg.provider === 'gemini')   await streamGemini(res, args);
             else if (cfg.provider === 'openai') await streamOpenAI(res, args);
             else if (cfg.provider === 'claude') await streamClaude(res, args);

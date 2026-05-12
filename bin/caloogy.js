@@ -56,10 +56,17 @@ function ask(iface, question) {
 
 // ── Interactive setup ─────────────────────────────────────────────────────────
 
+const GEMINI_MODELS = [
+    { label: 'gemini-1.5-flash  (free tier, recommended)', val: 'gemini-1.5-flash' },
+    { label: 'gemini-1.5-pro', val: 'gemini-1.5-pro' },
+    { label: 'gemini-2.5-flash', val: 'gemini-2.5-flash' },
+    { label: 'Custom model name…', val: '__custom__' },
+];
+
 async function setup() {
     const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
 
-    console.log(`  ${BOLD}First-time setup${RESET}\n`);
+    console.log(`  ${BOLD}Setup${RESET}\n`);
     console.log('  Select your AI provider:');
     console.log(`    ${TEAL}1${RESET}  Google Gemini`);
     console.log(`    ${TEAL}2${RESET}  OpenAI  (GPT-4o)`);
@@ -75,11 +82,27 @@ async function setup() {
     const provider  = providers[choice];
 
     const key = (await ask(iface, `\n  Paste your ${names[choice]} API key: `)).trim();
+    if (!key) { iface.close(); console.error('\n  Error: API key cannot be empty.\n'); process.exit(1); }
+
+    let model = undefined;
+    if (provider === 'gemini') {
+        console.log('\n  Select Gemini model:');
+        GEMINI_MODELS.forEach((m, i) => console.log(`    ${TEAL}${i+1}${RESET}  ${m.label}`));
+        let mc = '';
+        while (!mc || isNaN(mc) || +mc < 1 || +mc > GEMINI_MODELS.length) {
+            mc = (await ask(iface, `\n  Enter 1–${GEMINI_MODELS.length}: `)).trim();
+        }
+        const chosen = GEMINI_MODELS[+mc - 1];
+        if (chosen.val === '__custom__') {
+            model = (await ask(iface, '  Enter model name: ')).trim();
+        } else {
+            model = chosen.val;
+        }
+    }
+
     iface.close();
 
-    if (!key) { console.error('\n  Error: API key cannot be empty.\n'); process.exit(1); }
-
-    const cfg = { provider, key };
+    const cfg = { provider, key, ...(model ? { model } : {}) };
     saveConfig(cfg);
     console.log(`\n  ${TEAL}✓${RESET} Config saved to ${DIM}${CONFIG_PATH}${RESET}`);
     return cfg;
@@ -90,7 +113,10 @@ async function setup() {
 async function main() {
     printBanner();
 
-    let cfg = readConfig();
+    const args    = process.argv.slice(2);
+    const reconfig = args.includes('--reconfigure') || args.includes('-r');
+
+    let cfg = reconfig ? null : readConfig();
     if (!cfg) { cfg = await setup(); console.log(''); }
 
     const spin = spinner('Starting server…');
@@ -99,7 +125,9 @@ async function main() {
     const port = await startServer(cfg);
     const url  = `http://localhost:${port}`;
 
-    spin.stop(`  ${TEAL}✓${RESET} Running at ${BOLD}${url}${RESET}  ${DIM}(Ctrl+C to stop)${RESET}\n`);
+    const modelInfo = cfg.model ? ` · ${cfg.model}` : '';
+    spin.stop(`  ${TEAL}✓${RESET} Running at ${BOLD}${url}${RESET}  ${DIM}(Ctrl+C to stop)${RESET}`);
+    console.log(`  ${DIM}Provider: ${cfg.provider}${modelInfo}  ·  To reconfigure: caloogy --reconfigure${RESET}\n`);
 
     try {
         const open = (await import('open')).default;
