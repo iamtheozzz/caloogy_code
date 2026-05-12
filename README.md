@@ -25,7 +25,7 @@ On first run you'll be asked to choose an AI provider and paste your API key. Th
 | OpenAI (GPT-4o) | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 | Anthropic Claude | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
 
-Your key is stored locally at `~/.caloogy-config.json`. To switch providers, delete that file and re-run.
+Your key is stored locally at `~/.caloogy-config.json`. To switch providers, run `caloogy --reconfigure` (or `caloogy -r`).
 
 ## Requirements
 
@@ -35,9 +35,12 @@ Your key is stored locally at `~/.caloogy-config.json`. To switch providers, del
 ## What's included
 
 - Live BTC / ETH / SOL / BNB (+ 29 more) candlestick charts via OKX & Binance public APIs
+- RSI and MACD sub-charts open by default
 - 19 built-in backtest strategies (MA Cross, RSI Bands, Supertrend, Ichimoku, …)
+- Strategy builder: answer a few questions → AI generates a personalised analysis
 - Caloogy Code editor: write custom JS indicator code and run it on the chart
 - AI chat panel: describe a strategy in plain English → AI generates the code
+- Light / dark mode toggle
 
 ## Privacy
 
