@@ -1,6 +1,6 @@
 # Caloogy Code
 
-Local crypto quant analysis tool — the same charting and AI code editor as [caloogy.ai](https://caloogy.ai), running entirely on your machine with your own AI API key.
+Local crypto quant analysis tool — the same charting and AI code editor as [caloogy.com](https://caloogy.com), running entirely on your machine with your own AI API key.
 
 ## Quick Start
 
