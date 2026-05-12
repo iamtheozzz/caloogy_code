@@ -8,6 +8,39 @@ const rl   = require('readline');
 
 const CONFIG_PATH = path.join(os.homedir(), '.caloogy-config.json');
 
+// ── Terminal spinner (Claude Code style) ─────────────────────────────────────
+
+const FRAMES  = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+const TEAL    = '\x1b[38;5;43m';
+const BOLD    = '\x1b[1m';
+const DIM     = '\x1b[2m';
+const RESET   = '\x1b[0m';
+
+function spinner(label) {
+    let i = 0;
+    process.stdout.write('\x1b[?25l'); // hide cursor
+    const id = setInterval(() => {
+        process.stdout.write(`\r  ${TEAL}${FRAMES[i++ % FRAMES.length]}${RESET} ${label}   `);
+    }, 80);
+    return {
+        stop(finalLine) {
+            clearInterval(id);
+            process.stdout.write('\r\x1b[K');   // clear line
+            process.stdout.write('\x1b[?25h');  // show cursor
+            if (finalLine) console.log(finalLine);
+        },
+    };
+}
+
+function printBanner() {
+    console.log('');
+    console.log(`  ${BOLD}${TEAL}Caloogy Code${RESET}`);
+    console.log(`  ${DIM}Local quant analysis — powered by your AI key${RESET}`);
+    console.log('');
+}
+
+// ── Config helpers ────────────────────────────────────────────────────────────
+
 function readConfig() {
     try { return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); }
     catch { return null; }
@@ -21,14 +54,16 @@ function ask(iface, question) {
     return new Promise(resolve => iface.question(question, resolve));
 }
 
+// ── Interactive setup ─────────────────────────────────────────────────────────
+
 async function setup() {
     const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
 
-    console.log('\n  Caloogy Code — Local Setup\n');
+    console.log(`  ${BOLD}First-time setup${RESET}\n`);
     console.log('  Select your AI provider:');
-    console.log('    1) Google Gemini');
-    console.log('    2) OpenAI (ChatGPT)');
-    console.log('    3) Anthropic Claude\n');
+    console.log(`    ${TEAL}1${RESET}  Google Gemini`);
+    console.log(`    ${TEAL}2${RESET}  OpenAI  (GPT-4o)`);
+    console.log(`    ${TEAL}3${RESET}  Anthropic Claude\n`);
 
     let choice = '';
     while (!['1','2','3'].includes(choice)) {
@@ -46,20 +81,25 @@ async function setup() {
 
     const cfg = { provider, key };
     saveConfig(cfg);
-    console.log(`\n  ✓ Config saved to ${CONFIG_PATH}`);
+    console.log(`\n  ${TEAL}✓${RESET} Config saved to ${DIM}${CONFIG_PATH}${RESET}`);
     return cfg;
 }
 
+// ── Main ──────────────────────────────────────────────────────────────────────
+
 async function main() {
+    printBanner();
+
     let cfg = readConfig();
-    if (!cfg) { cfg = await setup(); }
+    if (!cfg) { cfg = await setup(); console.log(''); }
+
+    const spin = spinner('Starting server…');
 
     const { startServer } = require('../server.js');
     const port = await startServer(cfg);
     const url  = `http://localhost:${port}`;
 
-    console.log(`\n  ✓ Caloogy Code running at ${url}`);
-    console.log('    Press Ctrl+C to stop.\n');
+    spin.stop(`  ${TEAL}✓${RESET} Running at ${BOLD}${url}${RESET}  ${DIM}(Ctrl+C to stop)${RESET}\n`);
 
     try {
         const open = (await import('open')).default;
@@ -67,4 +107,4 @@ async function main() {
     } catch {}
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+main().catch(err => { console.error('\n  Error:', err.message, '\n'); process.exit(1); });

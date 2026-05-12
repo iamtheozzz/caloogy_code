@@ -1487,44 +1487,124 @@ function sbBuildContext() {
 }
 
 function sbLaunch() {
-    if (!window.caloogyUser) {
-        if (window.showAuthModal) window.showAuthModal('Sign in to generate your personalized investment analysis.');
-        return;
-    }
-    var asset   = _SB.answers[0] || 'BTC';
+    var asset   = _SB.answers[0] || 'Bitcoin (BTC)';
     var horizon = _SB.answers[1] || 'long-term holding';
     var risk    = _SB.answers[2] || 'balanced';
-
     var context = sbBuildContext();
-    var goal    = 'I am a ' + risk + ' investor focused on ' + asset
-                + ' with a ' + horizon + ' horizon. '
-                + 'Please analyze the market data and provide: '
-                + '1) Current market trend and momentum, '
-                + '2) Key price levels and risk factors, '
-                + '3) A concrete investment recommendation with an entry strategy.';
 
-    // Generate CSV from current candles
-    var csvFileName = Q.symbol + '_' + Q.bar + '.csv';
-    var csvRows = ['timestamp,open,high,low,close,volume'];
-    if (Q.candles && Q.candles.length > 0) {
-        Q.candles.forEach(function (c) {
-            var dt = new Date(c.ts).toISOString().replace('T', ' ').slice(0, 19);
-            csvRows.push(dt + ',' + c.open + ',' + c.high + ',' + c.low + ',' + c.close + ',' + c.volume);
-        });
-    }
-    var csvText = csvRows.join('\n');
+    // Open the AI chat panel
+    var chatEl = document.getElementById('qtAiChat');
+    var aiBtn  = document.getElementById('quantAiToggle');
+    _aiHistory = [];
+    if (chatEl) chatEl.style.display = 'flex';
+    if (aiBtn)  aiBtn.classList.add('active');
 
-    if (typeof setNavTab === 'function') setNavTab('data');
-    document.body.classList.remove('ai-hidden');
+    var msgsEl = document.getElementById('qtAiMsgs');
+    if (!msgsEl) return;
+    msgsEl.innerHTML = '';
 
-    setTimeout(function () {
-        if (window._injectDataFile) window._injectDataFile(csvText, csvFileName);
-        var desc = document.getElementById('dataDescription');
-        var inst = document.getElementById('dataInstruction');
-        if (desc) desc.value = context;
-        if (inst) inst.value = goal;
-        if (window._startDataAnalysis) window._startDataAnalysis();
-    }, 450);
+    // Show user profile as a user bubble
+    var userBubble = document.createElement('div');
+    userBubble.className = 'qt-ai-msg qt-ai-msg-user';
+    userBubble.textContent = asset + '  ·  ' + horizon + '  ·  ' + risk + ' risk';
+    msgsEl.appendChild(userBubble);
+
+    // Build the analysis prompt
+    var prompt = [
+        'Investor profile:',
+        '- Asset of interest: ' + asset,
+        '- Investment horizon: ' + horizon,
+        '- Risk appetite: ' + risk,
+        '',
+        'Live market context:',
+        context,
+        '',
+        'Please provide a concise investment analysis covering:',
+        '1. Current trend and momentum',
+        '2. Key support/resistance levels and risk factors',
+        '3. A concrete recommendation with entry strategy',
+    ].join('\n');
+
+    _sbSendAnalysis(prompt, msgsEl);
+}
+
+function _sbSendAnalysis(prompt, msgsEl) {
+    if (!msgsEl) msgsEl = document.getElementById('qtAiMsgs');
+
+    var thinkDiv = document.createElement('div');
+    thinkDiv.className = 'qt-ai-msg qt-ai-msg-ai qt-ai-thinking-bubble';
+    thinkDiv.textContent = 'Caloogy is thinking…';
+    msgsEl.appendChild(thinkDiv);
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+
+    var ANALYSIS_SYSTEM = [
+        'You are Caloogy, a professional crypto investment analyst.',
+        'Provide clear, data-driven investment analysis in plain English.',
+        'Write in concise paragraphs. Use numbered lists for recommendations.',
+        'Do NOT generate JavaScript code. Do NOT use markdown fences.',
+        'Be specific and actionable.',
+    ].join(' ');
+
+    var aiDiv = null;  // created on first chunk so thinkDiv stays visible
+    var full  = '';
+    var ctrl  = new AbortController();
+    var tid   = setTimeout(function () { ctrl.abort(); }, 40000);
+
+    fetch('/api/ai/chat', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ message: prompt, cosplay: ANALYSIS_SYSTEM,
+                                  session_id: null, history: [], force_rag: false, cot: false }),
+        signal:  ctrl.signal,
+    }).then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var reader = res.body.getReader();
+        var dec = new TextDecoder();
+        var buf = '';
+
+        function pump() {
+            reader.read().then(function (r) {
+                clearTimeout(tid);
+                if (r.done) { thinkDiv.remove(); return; }
+                buf += dec.decode(r.value, { stream: true });
+                var parts = buf.split('\n\n'); buf = parts.pop();
+                parts.forEach(function (p) {
+                    if (!p.startsWith('data: ')) return;
+                    var chunk = p.slice(6).trim();
+                    if (chunk === '[DONE]') return;
+                    try {
+                        var d = JSON.parse(chunk);
+                        if (d.text) {
+                            full += d.text;
+                            thinkDiv.remove();
+                            if (!aiDiv) {
+                                aiDiv = document.createElement('div');
+                                aiDiv.className = 'qt-ai-msg qt-ai-msg-ai';
+                                aiDiv.style.whiteSpace = 'pre-wrap';
+                                msgsEl.appendChild(aiDiv);
+                            }
+                            aiDiv.textContent = full;
+                            msgsEl.scrollTop = msgsEl.scrollHeight;
+                        }
+                    } catch (e) {}
+                });
+                pump();
+            }).catch(function (e) {
+                thinkDiv.remove();
+                var errDiv = document.createElement('div');
+                errDiv.className = 'qt-ai-msg qt-ai-msg-ai';
+                errDiv.textContent = '✗ ' + e.message;
+                msgsEl.appendChild(errDiv);
+            });
+        }
+        pump();
+    }).catch(function (e) {
+        thinkDiv.remove();
+        var errDiv = document.createElement('div');
+        errDiv.className = 'qt-ai-msg qt-ai-msg-ai';
+        errDiv.textContent = '✗ ' + (e.name === 'AbortError' ? 'Request timed out' : e.message);
+        msgsEl.appendChild(errDiv);
+    });
 }
 
 function sbInit() {

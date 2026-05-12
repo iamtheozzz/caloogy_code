@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "Local crypto quant analysis tool — powered by your own AI API key",
   "bin": {
-    "caloogy-code": "bin/caloogy.js"
+    "caloogy-code": "bin/caloogy.js",
+    "caloogy": "bin/caloogy.js"
   },
   "main": "server.js",
   "engines": {
