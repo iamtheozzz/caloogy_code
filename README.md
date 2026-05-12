@@ -5,7 +5,7 @@ Local crypto quant analysis tool — the same charting and AI code editor as [ca
 ## Quick Start
 
 ```bash
-npx github:YOUR_GITHUB_USERNAME/caloogy_code
+npx github:iamtheozzz/caloogy_code
 ```
 
 On first run you'll be asked to choose an AI provider and paste your API key. The browser opens automatically at `http://localhost:3000`.
