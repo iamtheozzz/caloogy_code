@@ -212,7 +212,7 @@ function startServer(cfg) {
     let server;
     return new Promise((resolve, reject) => {
         findFreePort(3000).then(port => {
-            server = app.listen(port, () => {
+            server = app.listen(port, '127.0.0.1', () => {
                 monitor.startMonitor(cfg);
                 resolve(port);
             });
