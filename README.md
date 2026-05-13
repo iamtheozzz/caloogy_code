@@ -148,9 +148,19 @@ caloogy --alerts
 | **MACD Cross** | MACD line crosses above or below the Signal line |
 | **BB Breakout** | Price breaks outside the upper or lower Bollinger Band |
 
+### Updating email without restarting
+
+You can update your Gmail address or App Password while `caloogy` is already running — no restart needed:
+
+1. Open a new terminal window
+2. Run `caloogy --reconfigure` and choose **4 — Skip (keep existing AI config)**
+3. Enter your new Gmail address and App Password
+4. Save — the change takes effect on the next scan (within 5 minutes)
+
 ### How it works
 
 - The background monitor polls OKX / Binance every **5 minutes** for all watched symbols
+- Email credentials are re-read from disk on every scan, so config changes take effect without restart
 - All indicator calculations run locally — no data leaves your machine except the AI API calls
 - Each alert has a configurable **cooldown** (default 60 minutes) to prevent repeated notifications
 - Alert rules are stored at `~/.caloogy-alerts.json`
