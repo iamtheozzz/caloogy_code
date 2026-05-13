@@ -104,6 +104,41 @@ caloogy -r
 |------|-------------|
 | `--reconfigure`, `-r` | Re-run setup to change provider, API key, or email |
 | `--alerts`, `-a` | Open the alert manager in the terminal |
+| `--chat`, `-c` | Start the terminal AI agent (manage alerts + export CSV with natural language) |
+
+---
+
+## Terminal AI Agent
+
+`caloogy --chat` opens a terminal REPL powered by your configured AI provider (Gemini, OpenAI, or Claude). No server needs to be running — it works standalone.
+
+```bash
+caloogy --chat
+```
+
+You can talk to it in plain English to:
+
+**Manage alerts**
+```
+You: alert me when BTC drops more than 6% in 3 hours
+AI:  Done — alert added (ID: k3x9a2b). BTCUSDT will trigger when price drops ≥6% over 3 candles.
+
+You: show my alerts
+AI:  1. [ON] BTCUSDT  price_change  (pct=6, lookback=3, direction=below) — ID: k3x9a2b — never triggered
+
+You: remove the BTC alert
+AI:  Removed alert k3x9a2b.
+```
+
+**Export price data to CSV**
+```
+You: export ETH daily data for the last 100 days to eth_daily.csv
+AI:  Saved 100 candles to /Users/you/eth_daily.csv
+```
+
+The CSV contains columns: `timestamp, open, high, low, close, volume`. Supported intervals: `1H`, `4H`, `1D`, `1W`.
+
+Type `exit` or `quit` to leave the chat.
 
 ---
 

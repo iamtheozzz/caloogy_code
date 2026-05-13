@@ -403,14 +403,17 @@ async function alertsCLI() {
             }
 
         } else if (choice === '5') {
-            if (!cfg || !cfg.email || !cfg.gmailPass) {
-                console.log(`\n  ${DIM}No email configured. Run: caloogy --reconfigure${RESET}\n`);
+            const hasChannel = cfg && (
+                (cfg.email && cfg.gmailPass) || cfg.discordWebhook || (cfg.telegramToken && cfg.telegramChatId)
+            );
+            if (!hasChannel) {
+                console.log(`\n  ${DIM}No notification channel configured. Run: caloogy --reconfigure${RESET}\n`);
             } else {
-                const spin = spinner('Sending test email…');
+                const spin = spinner('Sending test notification…');
                 try {
-                    const { sendTestEmail } = require('../lib/monitor');
-                    await sendTestEmail(cfg);
-                    spin.stop(`  ${K2}✓${RESET} Test email sent to ${cfg.email}\n`);
+                    const { sendTestNotify } = require('../lib/notify');
+                    await sendTestNotify(cfg);
+                    spin.stop(`  ${K2}✓${RESET} Test notification sent\n`);
                 } catch (e) {
                     spin.stop(`  ${DIM}⚠ Failed: ${e.message}${RESET}\n`);
                 }
@@ -429,8 +432,20 @@ async function main() {
     const args      = process.argv.slice(2);
     const reconfig  = args.includes('--reconfigure') || args.includes('-r');
     const alertMode = args.includes('--alerts')      || args.includes('-a');
+    const chatMode  = args.includes('--chat')        || args.includes('-c');
 
     if (alertMode) { await alertsCLI(); return; }
+
+    if (chatMode) {
+        const cfg = readConfig();
+        if (!cfg) {
+            console.log(`\n  No config found. Run ${BOLD}caloogy${RESET} first to set up your AI key.\n`);
+            process.exit(1);
+        }
+        const { startChat } = require('../lib/terminal-ai');
+        await startChat(cfg);
+        return;
+    }
 
     await showBanner();
 
