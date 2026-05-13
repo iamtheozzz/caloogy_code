@@ -29,6 +29,146 @@
       font-weight: 600;
     }
 
+    /* ── Alerts panel ── */
+    .cc-alerts-wrap {
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-primary);
+    }
+    .cc-alerts-hdr {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px;
+      height: 38px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .cc-alerts-hdr:hover { background: rgba(128,128,128,0.05); }
+    .cc-alerts-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .cc-alerts-count {
+      font-size: 11px;
+      background: rgba(37,99,235,0.15);
+      color: #2563eb;
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-weight: 600;
+    }
+    .cc-alerts-chevron {
+      margin-left: auto;
+      color: var(--text-secondary);
+      transition: transform 0.2s;
+    }
+    .cc-alerts-hdr.open .cc-alerts-chevron { transform: rotate(180deg); }
+    .cc-alerts-body {
+      display: none;
+      padding: 10px 16px 14px;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .cc-alerts-body.cc-alerts-open { display: flex; }
+    .cc-alerts-email-banner {
+      font-size: 12px;
+      color: var(--text-secondary);
+      background: rgba(128,128,128,0.07);
+      border-radius: 6px;
+      padding: 7px 12px;
+    }
+    .cc-alerts-email-banner code {
+      font-family: monospace;
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    .cc-alerts-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .cc-alerts-add-btn, .cc-alerts-test-btn {
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      border-radius: 6px;
+      padding: 4px 12px;
+      cursor: pointer;
+      border: 1px solid var(--border-color);
+      background: transparent;
+      color: var(--text-primary);
+    }
+    .cc-alerts-add-btn:hover, .cc-alerts-test-btn:hover { background: rgba(128,128,128,0.08); }
+    .cc-alerts-empty { font-size: 12px; color: var(--text-secondary); padding: 4px 0; }
+    .cc-alert-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 10px;
+      border-radius: 7px;
+      background: rgba(128,128,128,0.05);
+      border: 1px solid var(--border-color);
+    }
+    .cc-alert-info { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+    .cc-alert-coin { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+    .cc-alert-type { font-size: 11px; color: #2563eb; font-weight: 600; }
+    .cc-alert-params { font-size: 11px; color: var(--text-secondary); }
+    .cc-alert-meta { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+    .cc-alert-actions { display: flex; gap: 5px; align-items: center; }
+    .cc-alert-toggle {
+      font-size: 11px; font-weight: 700; font-family: inherit;
+      border-radius: 4px; padding: 2px 8px; cursor: pointer; border: none;
+    }
+    .cc-alert-on  { background: rgba(37,99,235,0.15); color: #2563eb; }
+    .cc-alert-off { background: rgba(128,128,128,0.1); color: var(--text-secondary); }
+    .cc-alert-del {
+      font-size: 11px; background: none; border: none; cursor: pointer;
+      color: var(--text-secondary); padding: 2px 5px; border-radius: 4px;
+    }
+    .cc-alert-del:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
+    /* Add-alert form */
+    .cc-alert-form {
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      background: rgba(128,128,128,0.04);
+    }
+    .cc-alert-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .cc-alert-field {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .cc-alert-sel, .cc-alert-inp {
+      font-size: 12px;
+      font-family: inherit;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      padding: 3px 7px;
+    }
+    .cc-alert-inp { width: 70px; }
+    .cc-alert-form-btns { display: flex; gap: 7px; margin-top: 4px; }
+    .cc-alert-save {
+      font-size: 12px; font-weight: 600; font-family: inherit;
+      background: #2563eb; color: #fff; border: none;
+      border-radius: 5px; padding: 4px 14px; cursor: pointer;
+    }
+    .cc-alert-save:hover { background: #1d4ed8; }
+    .cc-alert-cancel {
+      font-size: 12px; font-family: inherit; background: none;
+      border: 1px solid var(--border-color); color: var(--text-secondary);
+      border-radius: 5px; padding: 4px 12px; cursor: pointer;
+    }
+
     /* ── Nav bar ── */
     .cc-nav {
       position: sticky;
@@ -146,6 +286,73 @@
     btnDark.addEventListener('click',  function() { isDark = true;  apply(true);  });
   })();
 </script>
+
+<!-- ── Alerts Panel ── -->
+<div class="cc-alerts-wrap">
+  <div class="cc-alerts-hdr" id="ccAlertsToggle">
+    <span class="cc-alerts-title">Alerts</span>
+    <span class="cc-alerts-count" id="ccAlertsCount">0</span>
+    <svg class="cc-alerts-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+  </div>
+  <div class="cc-alerts-body" id="ccAlertsBody">
+
+    <div class="cc-alerts-email-banner" id="ccAlertsEmailBanner">
+      Email alerts not configured. Run <code>caloogy --reconfigure</code> to add your Gmail address.
+    </div>
+
+    <div class="cc-alerts-toolbar">
+      <button class="cc-alerts-add-btn" id="ccAlertAddBtn">+ Add Alert</button>
+      <button class="cc-alerts-test-btn" id="ccAlertTestEmail" style="display:none">Send test email</button>
+    </div>
+
+    <!-- Add alert form -->
+    <div class="cc-alert-form" id="ccAlertForm">
+      <div class="cc-alert-form-row">
+        <label class="cc-alert-field">Coin
+          <select class="cc-alert-sel" name="alertSymbol">
+            <option value="BTCUSDT">BTC</option>
+            <option value="ETHUSDT">ETH</option>
+            <option value="SOLUSDT">SOL</option>
+            <option value="BNBUSDT">BNB</option>
+            <option value="XRPUSDT">XRP</option>
+            <option value="DOGEUSDT">DOGE</option>
+            <option value="ADAUSDT">ADA</option>
+            <option value="AVAXUSDT">AVAX</option>
+            <option value="LINKUSDT">LINK</option>
+            <option value="DOTUSDT">DOT</option>
+            <option value="SOLUSDT">SOL</option>
+            <option value="TONUSDT">TON</option>
+            <option value="SUIUSDT">SUI</option>
+            <option value="ARBUSDT">ARB</option>
+            <option value="OPUSDT">OP</option>
+            <option value="NEARUSDT">NEAR</option>
+            <option value="INJUSDT">INJ</option>
+            <option value="APTUSDT">APT</option>
+            <option value="PEPEUSDT">PEPE</option>
+            <option value="SHIBUSDT">SHIB</option>
+          </select>
+        </label>
+        <label class="cc-alert-field">Type
+          <select class="cc-alert-sel" name="alertType">
+            <option value="price_change">Price Spike</option>
+            <option value="rsi_threshold">RSI Extreme</option>
+            <option value="price_vs_sma">SMA Cross</option>
+            <option value="macd_cross">MACD Cross</option>
+            <option value="bb_breakout">BB Breakout</option>
+          </select>
+        </label>
+      </div>
+      <div class="cc-alert-form-row" id="ccAlertParams"></div>
+      <div class="cc-alert-form-btns">
+        <button class="cc-alert-save" id="ccAlertSave">Save</button>
+        <button class="cc-alert-cancel" id="ccAlertCancel">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Alerts list -->
+    <div id="ccAlertsList"></div>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <!-- Quant Section                                                          -->
@@ -479,6 +686,7 @@
 </section>
 
 <script src="quant.js"></script>
+<script src="alerts.js"></script>
 <script>
   if (typeof window._initQuantTab === 'function') {
     window._initQuantTab();

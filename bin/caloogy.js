@@ -194,6 +194,9 @@ function saveConfig(cfg) {
 }
 function ask(iface, q) { return new Promise(r => iface.question(q, r)); }
 
+// ── Alerts path ───────────────────────────────────────────────────────────────
+const ALERTS_PATH = path.join(os.homedir(), '.caloogy-alerts.json');
+
 // ── Interactive setup ─────────────────────────────────────────────────────────
 const GEMINI_MODELS = [
     { label: 'gemini-1.5-flash  (free tier, recommended)', val: 'gemini-1.5-flash' },
@@ -231,17 +234,166 @@ async function setup() {
         model = chosen.val === '__custom__' ? (await ask(iface, '  Model name: ')).trim() : chosen.val;
     }
 
+    // Optional email alerts setup
+    console.log(`\n  ${DIM}─────────────────────────────────────────${RESET}`);
+    console.log(`  ${K2}Email Alerts${RESET}  ${DIM}(optional — press Enter to skip)${RESET}\n`);
+    const emailInput = (await ask(iface, `  Gmail address: `)).trim();
+    let gmailPass = '';
+    if (emailInput) {
+        gmailPass = (await ask(iface, `  Gmail App Password (16 chars): `)).trim();
+    }
+
     iface.close();
-    const cfg = { provider, key, ...(model ? { model } : {}) };
+    const cfg = {
+        provider, key,
+        ...(model      ? { model }              : {}),
+        ...(emailInput ? { email: emailInput }   : {}),
+        ...(gmailPass  ? { gmailPass }           : {}),
+    };
     saveConfig(cfg);
     console.log(`\n  ${K2}✓${RESET} Saved to ${DIM}${CONFIG_PATH}${RESET}\n`);
+
+    if (emailInput && gmailPass) {
+        const spin = spinner('Sending test email…');
+        try {
+            const { sendTestEmail } = require('../lib/monitor');
+            await sendTestEmail(cfg);
+            spin.stop(`  ${K2}✓${RESET} Test email sent to ${emailInput}`);
+        } catch (e) {
+            spin.stop(`  ${DIM}⚠ Test email failed: ${e.message}${RESET}`);
+        }
+    }
+
     return cfg;
+}
+
+// ── Alert Manager CLI ─────────────────────────────────────────────────────────
+const COIN_LIST = [
+    'BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT',
+    'ADAUSDT','AVAXUSDT','LINKUSDT','DOTUSDT','UNIUSDT','LTCUSDT',
+    'ATOMUSDT','NEARUSDT','APTUSDT','ARBUSDT','OPUSDT','SUIUSDT',
+    'TRXUSDT','MATICUSDT','FILUSDT','ICPUSDT','INJUSDT','TONUSDT',
+    'PEPEUSDT','SHIBUSDT','WIFUSDT','JUPUSDT','BONKUSDT','RENDERUSDT',
+    'FETUSDT','HBARUSDT','VETUSDT',
+];
+
+async function alertsCLI() {
+    const { readAlerts, addAlert, removeAlert, updateAlert } = require('../lib/monitor');
+    const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
+    const cfg   = readConfig();
+
+    console.log(`\n  ${BOLD}${K2}Caloogy Alert Manager${RESET}\n`);
+
+    let running = true;
+    while (running) {
+        const alerts = readAlerts();
+        console.log(`  ${K2}1${RESET}  List alerts  ${DIM}(${alerts.length} active)${RESET}`);
+        console.log(`  ${K2}2${RESET}  Add alert`);
+        console.log(`  ${K2}3${RESET}  Remove alert`);
+        console.log(`  ${K2}4${RESET}  Toggle alert on/off`);
+        console.log(`  ${K2}5${RESET}  Send test email`);
+        console.log(`  ${K2}6${RESET}  Exit\n`);
+
+        const choice = (await ask(iface, '  Enter 1–6: ')).trim();
+
+        if (choice === '1') {
+            if (alerts.length === 0) {
+                console.log(`\n  ${DIM}No alerts configured.${RESET}\n`);
+            } else {
+                console.log('');
+                alerts.forEach((a, i) => {
+                    const status = a.enabled ? `${K2}ON${RESET}` : `${DIM}OFF${RESET}`;
+                    const last   = a.lastTriggered ? `last: ${new Date(a.lastTriggered).toLocaleString()}` : 'never triggered';
+                    console.log(`  ${DIM}${i+1}.${RESET} [${status}] ${BOLD}${a.symbol}${RESET}  ${a.type}  ${DIM}(${last})  id:${a.id}${RESET}`);
+                });
+                console.log('');
+            }
+
+        } else if (choice === '2') {
+            console.log('\n  Coins: ' + COIN_LIST.slice(0,8).join(', ') + ', …');
+            let symbol = (await ask(iface, '  Symbol (e.g. BTCUSDT): ')).trim().toUpperCase();
+            if (!symbol.endsWith('USDT')) symbol += 'USDT';
+
+            console.log(`\n  Alert types:\n  ${K2}1${RESET} Price spike  ${K2}2${RESET} RSI extreme  ${K2}3${RESET} Price vs SMA  ${K2}4${RESET} MACD cross  ${K2}5${RESET} Bollinger breakout\n`);
+            const t = (await ask(iface, '  Type 1–5: ')).trim();
+            const types = { '1':'price_change','2':'rsi_threshold','3':'price_vs_sma','4':'macd_cross','5':'bb_breakout' };
+            const type  = types[t];
+            if (!type) { console.log(`\n  ${DIM}Invalid choice.${RESET}\n`); continue; }
+
+            const rule = { symbol, type, cooldownMinutes: 60 };
+
+            if (type === 'price_change') {
+                rule.pct      = +((await ask(iface, '  Min % change (default 5): ')).trim() || '5');
+                rule.lookback = +((await ask(iface, '  Lookback candles (default 3): ')).trim() || '3');
+            } else if (type === 'rsi_threshold') {
+                const d = (await ask(iface, '  Direction — above / below (default above): ')).trim() || 'above';
+                rule.direction = d === 'below' ? 'below' : 'above';
+                rule.threshold = +((await ask(iface, `  Threshold (default ${rule.direction==='above'?70:30}): `)).trim() || (rule.direction==='above'?'70':'30'));
+            } else if (type === 'price_vs_sma') {
+                const d = (await ask(iface, '  Direction — cross_above / cross_below (default cross_above): ')).trim() || 'cross_above';
+                rule.direction = d === 'cross_below' ? 'cross_below' : 'cross_above';
+                rule.period    = +((await ask(iface, '  SMA period (default 20): ')).trim() || '20');
+            } else if (type === 'macd_cross') {
+                const d = (await ask(iface, '  Direction — cross_above / cross_below (default cross_above): ')).trim() || 'cross_above';
+                rule.direction = d === 'cross_below' ? 'cross_below' : 'cross_above';
+            } else if (type === 'bb_breakout') {
+                const d = (await ask(iface, '  Direction — above_upper / below_lower (default above_upper): ')).trim() || 'above_upper';
+                rule.direction = d === 'below_lower' ? 'below_lower' : 'above_upper';
+            }
+
+            rule.cooldownMinutes = +((await ask(iface, '  Cooldown minutes (default 60): ')).trim() || '60');
+            addAlert(rule);
+            console.log(`\n  ${K2}✓${RESET} Alert saved.\n`);
+
+        } else if (choice === '3') {
+            const alerts2 = readAlerts();
+            if (!alerts2.length) { console.log(`\n  ${DIM}No alerts.${RESET}\n`); continue; }
+            alerts2.forEach((a, i) => console.log(`  ${K2}${i+1}${RESET}  ${a.symbol}  ${a.type}  ${DIM}id:${a.id}${RESET}`));
+            const idx = +((await ask(iface, '\n  Remove #: ')).trim()) - 1;
+            if (alerts2[idx]) { removeAlert(alerts2[idx].id); console.log(`\n  ${K2}✓${RESET} Removed.\n`); }
+
+        } else if (choice === '4') {
+            const alerts3 = readAlerts();
+            if (!alerts3.length) { console.log(`\n  ${DIM}No alerts.${RESET}\n`); continue; }
+            alerts3.forEach((a, i) => {
+                const status = a.enabled ? `${K2}ON${RESET}` : `${DIM}OFF${RESET}`;
+                console.log(`  ${K2}${i+1}${RESET}  [${status}] ${a.symbol}  ${a.type}`);
+            });
+            const idx = +((await ask(iface, '\n  Toggle #: ')).trim()) - 1;
+            if (alerts3[idx]) {
+                updateAlert(alerts3[idx].id, { enabled: !alerts3[idx].enabled });
+                console.log(`\n  ${K2}✓${RESET} Toggled.\n`);
+            }
+
+        } else if (choice === '5') {
+            if (!cfg || !cfg.email || !cfg.gmailPass) {
+                console.log(`\n  ${DIM}No email configured. Run: caloogy --reconfigure${RESET}\n`);
+            } else {
+                const spin = spinner('Sending test email…');
+                try {
+                    const { sendTestEmail } = require('../lib/monitor');
+                    await sendTestEmail(cfg);
+                    spin.stop(`  ${K2}✓${RESET} Test email sent to ${cfg.email}\n`);
+                } catch (e) {
+                    spin.stop(`  ${DIM}⚠ Failed: ${e.message}${RESET}\n`);
+                }
+            }
+
+        } else if (choice === '6') {
+            running = false;
+        }
+    }
+
+    iface.close();
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-    const args     = process.argv.slice(2);
-    const reconfig = args.includes('--reconfigure') || args.includes('-r');
+    const args      = process.argv.slice(2);
+    const reconfig  = args.includes('--reconfigure') || args.includes('-r');
+    const alertMode = args.includes('--alerts')      || args.includes('-a');
+
+    if (alertMode) { await alertsCLI(); return; }
 
     await showBanner();
 

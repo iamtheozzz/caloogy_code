@@ -102,6 +102,8 @@ function findFreePort(start) {
 
 // ── Express app ───────────────────────────────────────────────────────────────
 
+const monitor = require('./lib/monitor');
+
 function startServer(cfg) {
     const app = express();
     app.use(express.json({ limit: '2mb' }));
@@ -142,6 +144,45 @@ function startServer(cfg) {
         }
     });
 
+    // ── Alerts API ────────────────────────────────────────────────────────────
+    app.get('/api/alerts', (req, res) => {
+        res.json(monitor.readAlerts());
+    });
+
+    app.post('/api/alerts', (req, res) => {
+        const rule = req.body;
+        if (!rule || !rule.symbol || !rule.type) {
+            return res.status(400).json({ error: 'symbol and type required' });
+        }
+        res.json(monitor.addAlert(rule));
+    });
+
+    app.delete('/api/alerts/:id', (req, res) => {
+        monitor.removeAlert(req.params.id);
+        res.json({ ok: true });
+    });
+
+    app.put('/api/alerts/:id', (req, res) => {
+        monitor.updateAlert(req.params.id, req.body);
+        res.json({ ok: true });
+    });
+
+    app.post('/api/alerts/test-email', async (req, res) => {
+        if (!cfg.email || !cfg.gmailPass) {
+            return res.status(400).json({ error: 'Email not configured. Run caloogy --reconfigure.' });
+        }
+        try {
+            await monitor.sendTestEmail(cfg);
+            res.json({ ok: true });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.get('/api/alerts/config', (req, res) => {
+        res.json({ emailConfigured: !!(cfg.email && cfg.gmailPass), email: cfg.email || null });
+    });
+
     // Allow re-running setup: POST /api/reset-config
     app.post('/api/reset-config', (req, res) => {
         const os      = require('os');
@@ -158,7 +199,10 @@ function startServer(cfg) {
     let server;
     return new Promise((resolve, reject) => {
         findFreePort(3000).then(port => {
-            server = app.listen(port, () => resolve(port));
+            server = app.listen(port, () => {
+                monitor.startMonitor(cfg);
+                resolve(port);
+            });
         }).catch(reject);
     });
 }
