@@ -209,46 +209,64 @@ async function setup() {
     console.log(`\n  ${BOLD}${K2}Caloogy Code${RESET}  ${DIM}— setup${RESET}\n`);
     const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
 
+    // If existing config, offer skip option
+    const existing = readConfig();
+    let provider, key, model;
+
     console.log('  Select AI provider:');
     console.log(`    ${K2}1${RESET}  Google Gemini`);
     console.log(`    ${K2}2${RESET}  OpenAI  (GPT-4o)`);
-    console.log(`    ${K2}3${RESET}  Anthropic Claude\n`);
+    console.log(`    ${K2}3${RESET}  Anthropic Claude`);
+    if (existing) console.log(`    ${K2}4${RESET}  ${DIM}Skip — keep existing AI config${RESET}`);
+    console.log('');
 
+    const validChoices = existing ? ['1','2','3','4'] : ['1','2','3'];
     let choice = '';
-    while (!['1','2','3'].includes(choice)) choice = (await ask(iface, '  Enter 1–3: ')).trim();
+    while (!validChoices.includes(choice))
+        choice = (await ask(iface, `  Enter 1–${existing ? '4' : '3'}: `)).trim();
 
-    const providers = { '1': 'gemini', '2': 'openai', '3': 'claude' };
-    const names     = { '1': 'Gemini', '2': 'OpenAI',  '3': 'Claude'  };
-    const provider  = providers[choice];
-    const key = (await ask(iface, `\n  ${names[choice]} API key: `)).trim();
-    if (!key) { iface.close(); console.error('\n  Error: key empty.\n'); process.exit(1); }
+    if (choice === '4') {
+        // Keep existing AI config, jump straight to email setup
+        provider = existing.provider;
+        key      = existing.key;
+        model    = existing.model;
+    } else {
+        const providers = { '1': 'gemini', '2': 'openai', '3': 'claude' };
+        const names     = { '1': 'Gemini', '2': 'OpenAI',  '3': 'Claude'  };
+        provider = providers[choice];
+        key = (await ask(iface, `\n  ${names[choice]} API key: `)).trim();
+        if (!key) { iface.close(); console.error('\n  Error: key empty.\n'); process.exit(1); }
 
-    let model;
-    if (provider === 'gemini') {
-        console.log('\n  Gemini model:');
-        GEMINI_MODELS.forEach((m, i) => console.log(`    ${K2}${i+1}${RESET}  ${m.label}`));
-        let mc = '';
-        while (!mc || isNaN(mc) || +mc < 1 || +mc > GEMINI_MODELS.length)
-            mc = (await ask(iface, `\n  Enter 1–${GEMINI_MODELS.length}: `)).trim();
-        const chosen = GEMINI_MODELS[+mc - 1];
-        model = chosen.val === '__custom__' ? (await ask(iface, '  Model name: ')).trim() : chosen.val;
+        if (provider === 'gemini') {
+            console.log('\n  Gemini model:');
+            GEMINI_MODELS.forEach((m, i) => console.log(`    ${K2}${i+1}${RESET}  ${m.label}`));
+            let mc = '';
+            while (!mc || isNaN(mc) || +mc < 1 || +mc > GEMINI_MODELS.length)
+                mc = (await ask(iface, `\n  Enter 1–${GEMINI_MODELS.length}: `)).trim();
+            const chosen = GEMINI_MODELS[+mc - 1];
+            model = chosen.val === '__custom__' ? (await ask(iface, '  Model name: ')).trim() : chosen.val;
+        }
     }
 
     // Optional email alerts setup
     console.log(`\n  ${DIM}─────────────────────────────────────────${RESET}`);
     console.log(`  ${K2}Email Alerts${RESET}  ${DIM}(optional — press Enter to skip)${RESET}\n`);
-    const emailInput = (await ask(iface, `  Gmail address: `)).trim();
+    const emailDefault = existing && existing.email ? ` ${DIM}(current: ${existing.email})${RESET}` : '';
+    console.log(`  Leave blank to keep unchanged.${emailDefault}`);
+    const emailInput = (await ask(iface, `\n  Gmail address: `)).trim();
     let gmailPass = '';
     if (emailInput) {
         gmailPass = (await ask(iface, `  Gmail App Password (16 chars): `)).trim();
     }
 
     iface.close();
+
+    // Merge: new values override existing, blanks fall back to existing
     const cfg = {
         provider, key,
-        ...(model      ? { model }              : {}),
-        ...(emailInput ? { email: emailInput }   : {}),
-        ...(gmailPass  ? { gmailPass }           : {}),
+        ...(model                             ? { model }            : {}),
+        ...(emailInput                        ? { email: emailInput } : (existing && existing.email    ? { email: existing.email }       : {})),
+        ...(gmailPass                         ? { gmailPass }        : (existing && existing.gmailPass ? { gmailPass: existing.gmailPass } : {})),
     };
     saveConfig(cfg);
     console.log(`\n  ${K2}✓${RESET} Saved to ${DIM}${CONFIG_PATH}${RESET}\n`);
