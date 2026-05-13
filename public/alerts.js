@@ -171,12 +171,13 @@ function initAlerts() {
 
     if (!toggle) return;
 
-    // Check email config
+    // Check notification config
     apiGet('/api/alerts/config').then(function (cfg) {
-        _alertsEmailConfigured = cfg.emailConfigured;
+        var anyConfigured = cfg.emailConfigured || cfg.discordConfigured || cfg.telegramConfigured;
+        _alertsEmailConfigured = anyConfigured;
         var banner = document.getElementById('ccAlertsEmailBanner');
-        if (banner) banner.style.display = cfg.emailConfigured ? 'none' : 'block';
-        if (testBtn) testBtn.style.display = cfg.emailConfigured ? 'inline-block' : 'none';
+        if (banner) banner.style.display = anyConfigured ? 'none' : 'block';
+        if (testBtn) testBtn.style.display = anyConfigured ? 'inline-block' : 'none';
     });
 
     // Toggle panel
@@ -215,14 +216,14 @@ function initAlerts() {
         cancelBtn.addEventListener('click', function () { form.style.display = 'none'; });
     }
 
-    // Test email
+    // Test notification
     if (testBtn) {
         testBtn.addEventListener('click', function () {
             testBtn.disabled = true;
             testBtn.textContent = 'Sending…';
-            apiPost('/api/alerts/test-email', {}).then(function (r) {
+            apiPost('/api/alerts/test-notify', {}).then(function (r) {
                 testBtn.textContent = r.ok ? 'Sent ✓' : 'Failed: ' + r.error;
-                setTimeout(function () { testBtn.textContent = 'Send test email'; testBtn.disabled = false; }, 3000);
+                setTimeout(function () { testBtn.textContent = 'Send test notification'; testBtn.disabled = false; }, 3000);
             });
         });
     }

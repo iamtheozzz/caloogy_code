@@ -248,37 +248,56 @@ async function setup() {
         }
     }
 
-    // Optional email alerts setup
+    // ── Gmail ──
     console.log(`\n  ${DIM}─────────────────────────────────────────${RESET}`);
-    console.log(`  ${K2}Email Alerts${RESET}  ${DIM}(optional — press Enter to skip)${RESET}\n`);
-    const emailDefault = existing && existing.email ? ` ${DIM}(current: ${existing.email})${RESET}` : '';
-    console.log(`  Leave blank to keep unchanged.${emailDefault}`);
+    console.log(`  ${K2}Email Alerts${RESET}  ${DIM}(optional — press Enter to skip)${RESET}`);
+    if (existing && existing.email) console.log(`  ${DIM}current: ${existing.email}${RESET}`);
     const emailInput = (await ask(iface, `\n  Gmail address: `)).trim();
     let gmailPass = '';
-    if (emailInput) {
-        gmailPass = (await ask(iface, `  Gmail App Password (16 chars): `)).trim();
-    }
+    if (emailInput) gmailPass = (await ask(iface, `  Gmail App Password (16 chars): `)).trim();
+
+    // ── Discord ──
+    console.log(`\n  ${DIM}─────────────────────────────────────────${RESET}`);
+    console.log(`  ${K2}Discord Alerts${RESET}  ${DIM}(optional — press Enter to skip)${RESET}`);
+    if (existing && existing.discordWebhook) console.log(`  ${DIM}current: configured${RESET}`);
+    const discordWebhook = (await ask(iface, `\n  Discord Webhook URL: `)).trim();
+
+    // ── Telegram ──
+    console.log(`\n  ${DIM}─────────────────────────────────────────${RESET}`);
+    console.log(`  ${K2}Telegram Alerts${RESET}  ${DIM}(optional — press Enter to skip)${RESET}`);
+    if (existing && existing.telegramToken) console.log(`  ${DIM}current: configured${RESET}`);
+    console.log(`  ${DIM}Create a bot via @BotFather, send it a message, then get your Chat ID from:${RESET}`);
+    console.log(`  ${DIM}https://api.telegram.org/bot<TOKEN>/getUpdates${RESET}\n`);
+    const telegramToken  = (await ask(iface, `  Telegram Bot Token: `)).trim();
+    let telegramChatId = '';
+    if (telegramToken) telegramChatId = (await ask(iface, `  Telegram Chat ID: `)).trim();
 
     iface.close();
 
     // Merge: new values override existing, blanks fall back to existing
+    const pick = (newVal, existKey) => newVal || (existing && existing[existKey]) || undefined;
     const cfg = {
         provider, key,
-        ...(model                             ? { model }            : {}),
-        ...(emailInput                        ? { email: emailInput } : (existing && existing.email    ? { email: existing.email }       : {})),
-        ...(gmailPass                         ? { gmailPass }        : (existing && existing.gmailPass ? { gmailPass: existing.gmailPass } : {})),
+        ...(model                          ? { model }                                      : {}),
+        ...(pick(emailInput,  'email')     ? { email:          pick(emailInput,  'email') } : {}),
+        ...(pick(gmailPass,   'gmailPass') ? { gmailPass:      pick(gmailPass,   'gmailPass') } : {}),
+        ...(pick(discordWebhook, 'discordWebhook') ? { discordWebhook: pick(discordWebhook, 'discordWebhook') } : {}),
+        ...(pick(telegramToken, 'telegramToken')   ? { telegramToken:  pick(telegramToken,  'telegramToken')  } : {}),
+        ...(pick(telegramChatId,'telegramChatId')  ? { telegramChatId: pick(telegramChatId, 'telegramChatId') } : {}),
     };
     saveConfig(cfg);
     console.log(`\n  ${K2}✓${RESET} Saved to ${DIM}${CONFIG_PATH}${RESET}\n`);
 
-    if (emailInput && gmailPass) {
-        const spin = spinner('Sending test email…');
+    // Send test notification to any newly configured channel
+    const hasNew = (emailInput && gmailPass) || discordWebhook || (telegramToken && telegramChatId);
+    if (hasNew) {
+        const spin = spinner('Sending test notification…');
         try {
-            const { sendTestEmail } = require('../lib/monitor');
-            await sendTestEmail(cfg);
-            spin.stop(`  ${K2}✓${RESET} Test email sent to ${emailInput}`);
+            const { sendTestNotify } = require('../lib/notify');
+            await sendTestNotify(cfg);
+            spin.stop(`  ${K2}✓${RESET} Test notification sent`);
         } catch (e) {
-            spin.stop(`  ${DIM}⚠ Test email failed: ${e.message}${RESET}`);
+            spin.stop(`  ${DIM}⚠ Test notification failed: ${e.message}${RESET}`);
         }
     }
 

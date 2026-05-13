@@ -167,20 +167,33 @@ function startServer(cfg) {
         res.json({ ok: true });
     });
 
-    app.post('/api/alerts/test-email', async (req, res) => {
-        if (!cfg.email || !cfg.gmailPass) {
-            return res.status(400).json({ error: 'Email not configured. Run caloogy --reconfigure.' });
+    app.post('/api/alerts/test-notify', async (req, res) => {
+        const hasEmail    = !!(cfg.email && cfg.gmailPass);
+        const hasDiscord  = !!cfg.discordWebhook;
+        const hasTelegram = !!(cfg.telegramToken && cfg.telegramChatId);
+        if (!hasEmail && !hasDiscord && !hasTelegram) {
+            return res.status(400).json({ error: 'No notification channel configured. Run caloogy --reconfigure.' });
         }
         try {
-            await monitor.sendTestEmail(cfg);
+            await monitor.sendTestNotify(cfg);
             res.json({ ok: true });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
+    // Legacy alias
+    app.post('/api/alerts/test-email', async (req, res) => {
+        res.redirect(307, '/api/alerts/test-notify');
+    });
+
     app.get('/api/alerts/config', (req, res) => {
-        res.json({ emailConfigured: !!(cfg.email && cfg.gmailPass), email: cfg.email || null });
+        res.json({
+            emailConfigured:    !!(cfg.email && cfg.gmailPass),
+            discordConfigured:  !!cfg.discordWebhook,
+            telegramConfigured: !!(cfg.telegramToken && cfg.telegramChatId),
+            email: cfg.email || null,
+        });
     });
 
     // Allow re-running setup: POST /api/reset-config

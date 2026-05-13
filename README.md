@@ -109,15 +109,27 @@ caloogy -r
 
 ## Price & Indicator Alerts
 
-Caloogy Code includes a local risk management system that monitors your watched coins in the background and sends email alerts when sharp price or indicator movements are detected.
+Caloogy Code includes a local risk management system that monitors your watched coins in the background and sends notifications when sharp price or indicator movements are detected. Alerts can be delivered via **Gmail**, **Discord**, and/or **Telegram** — configure one or all three.
 
 ### Setup
 
-During `caloogy --reconfigure`, you will be prompted for:
+During `caloogy --reconfigure`, you will be prompted for each notification channel. All channels are optional — configure only the ones you want.
+
+#### Gmail
+
 - A **Gmail address** to receive alerts
 - A **Gmail App Password** (16-character password generated at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords))
 
-A test email is sent automatically to confirm the setup works.
+#### Discord
+
+- A **Discord Webhook URL** — created in any channel via **Channel Settings → Integrations → Webhooks → New Webhook → Copy Webhook URL**
+
+#### Telegram
+
+- A **Telegram Bot Token** — create a bot with [@BotFather](https://t.me/BotFather), send `/newbot`, copy the token
+- A **Telegram Chat ID** — send any message to your bot, then visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy the `chat.id` value
+
+A test notification is sent to all configured channels automatically to confirm setup works.
 
 ### Managing alerts
 
@@ -134,7 +146,7 @@ caloogy --alerts
   2) Add alert
   3) Remove alert
   4) Toggle alert on/off
-  5) Send test email
+  5) Send test notification
   6) Exit
 ```
 
@@ -148,25 +160,26 @@ caloogy --alerts
 | **MACD Cross** | MACD line crosses above or below the Signal line |
 | **BB Breakout** | Price breaks outside the upper or lower Bollinger Band |
 
-### Updating email without restarting
+### Updating notification settings without restarting
 
-You can update your Gmail address or App Password while `caloogy` is already running — no restart needed:
+You can update any notification channel while `caloogy` is already running — no restart needed:
 
 1. Open a new terminal window
 2. Run `caloogy --reconfigure` and choose **4 — Skip (keep existing AI config)**
-3. Enter your new Gmail address and App Password
+3. Enter the new credentials for the channel you want to update
 4. Save — the change takes effect on the next scan (within 5 minutes)
 
 ### How it works
 
 - The background monitor polls OKX / Binance every **5 minutes** for all watched symbols
-- Email credentials are re-read from disk on every scan, so config changes take effect without restart
+- All notification credentials are re-read from disk on every scan, so config changes take effect without restart
+- Each enabled channel (Gmail, Discord, Telegram) receives the notification concurrently
 - All indicator calculations run locally — no data leaves your machine except the AI API calls
 - Each alert has a configurable **cooldown** (default 60 minutes) to prevent repeated notifications
 - Alert rules are stored at `~/.caloogy-alerts.json`
 - Alerts are only active while `caloogy` is running in the terminal
 
-### Example alert email
+### Example alert notification
 
 ```
 Subject: [Caloogy Alert] BTC Price Spike +6.3%
@@ -190,7 +203,7 @@ Sent by Caloogy Code running on your local machine.
 - **Strategy builder** — answer a few questions, get an AI-generated investment analysis in plain English
 - **Caloogy Code editor** — write custom JavaScript indicators and run them live on the chart
 - **AI chat** — describe any strategy in plain English → AI writes the code and runs it instantly
-- **Price & indicator alerts** — background monitoring with Gmail email notifications
+- **Price & indicator alerts** — background monitoring with Gmail, Discord, and Telegram notifications
 - **Light / dark mode** toggle
 - **Auto coin switching** — mention ETH or SOL in your AI prompt and the chart switches automatically
 
