@@ -102,7 +102,72 @@ caloogy -r
 
 | Flag | Description |
 |------|-------------|
-| `--reconfigure`, `-r` | Re-run setup to change provider or API key |
+| `--reconfigure`, `-r` | Re-run setup to change provider, API key, or email |
+| `--alerts`, `-a` | Open the alert manager in the terminal |
+
+---
+
+## Price & Indicator Alerts
+
+Caloogy Code includes a local risk management system that monitors your watched coins in the background and sends email alerts when sharp price or indicator movements are detected.
+
+### Setup
+
+During `caloogy --reconfigure`, you will be prompted for:
+- A **Gmail address** to receive alerts
+- A **Gmail App Password** (16-character password generated at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords))
+
+A test email is sent automatically to confirm the setup works.
+
+### Managing alerts
+
+**In the browser** — click the **Alerts** panel at the top of the page to add, remove, or toggle rules.
+
+**In the terminal:**
+```bash
+caloogy --alerts
+```
+```
+  Caloogy Alert Manager
+  ─────────────────────
+  1) List active alerts
+  2) Add alert
+  3) Remove alert
+  4) Toggle alert on/off
+  5) Send test email
+  6) Exit
+```
+
+### Supported alert types
+
+| Type | Trigger |
+|------|---------|
+| **Price Spike** | Price changes by ±X% within N candles (1H) |
+| **RSI Extreme** | RSI crosses above (overbought) or below (oversold) a threshold |
+| **SMA Cross** | Price crosses above or below a moving average |
+| **MACD Cross** | MACD line crosses above or below the Signal line |
+| **BB Breakout** | Price breaks outside the upper or lower Bollinger Band |
+
+### How it works
+
+- The background monitor polls OKX / Binance every **5 minutes** for all watched symbols
+- All indicator calculations run locally — no data leaves your machine except the AI API calls
+- Each alert has a configurable **cooldown** (default 60 minutes) to prevent repeated notifications
+- Alert rules are stored at `~/.caloogy-alerts.json`
+- Alerts are only active while `caloogy` is running in the terminal
+
+### Example alert email
+
+```
+Subject: [Caloogy Alert] BTC Price Spike +6.3%
+
+Asset:    BTCUSDT
+Trigger:  Price changed +6.3% in the last 3 candles (1H)
+Current:  $98,420.00
+Time:     Tue, 13 May 2026 14:35:00 GMT
+
+Sent by Caloogy Code running on your local machine.
+```
 
 ---
 
@@ -115,6 +180,7 @@ caloogy -r
 - **Strategy builder** — answer a few questions, get an AI-generated investment analysis in plain English
 - **Caloogy Code editor** — write custom JavaScript indicators and run them live on the chart
 - **AI chat** — describe any strategy in plain English → AI writes the code and runs it instantly
+- **Price & indicator alerts** — background monitoring with Gmail email notifications
 - **Light / dark mode** toggle
 - **Auto coin switching** — mention ETH or SOL in your AI prompt and the chart switches automatically
 
