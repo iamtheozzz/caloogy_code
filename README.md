@@ -209,6 +209,39 @@ Sent by Caloogy Code running on your local machine.
 
 ---
 
+## Backtest Strategies
+
+All 19 built-in strategies appear in the **Backtest** panel. Hover over any strategy button to see a one-line description; the panel below the chart shows the entry/exit rules and tunable parameters.
+
+Each strategy is backtested on the candles currently visible on your chart. Green triangles = buy signals, red triangles = sell signals. The equity curve and trade statistics update live as you adjust parameters.
+
+| Strategy | Signal logic | Good for |
+|---|---|---|
+| **MA Cross** | Buy when the fast EMA crosses above the slow EMA (golden cross); sell on the death cross | Trending markets |
+| **RSI Bands** | Buy when RSI climbs back above the oversold line; sell when it drops back below the overbought line | Range-bound markets |
+| **BB Bounce** | Buy when price closes back above the lower Bollinger Band; sell when it breaks the upper band | Mean-reverting conditions |
+| **MACD Cross** | Buy when the MACD line crosses above the Signal line; sell on the reverse cross | Trend confirmation |
+| **Donchian Breakout** | Buy when price breaks above the N-period highest high; sell when it breaks below the N-period lowest low (Turtle Trading style) | Breakout / momentum |
+| **Mean Reversion** | Buy when price recovers from X% below its SMA; sell when price crosses back above SMA | Overextended dips |
+| **Stochastic** | Buy when %K climbs back above the oversold zone; sell when it drops back below the overbought zone | Short-term reversals |
+| **Supertrend** | Buy when the ATR-based Supertrend indicator flips from bearish to bullish; sell on the reverse flip | Trending markets |
+| **CCI** | Buy when the Commodity Channel Index rises back above −threshold; sell when it drops back below +threshold | Overbought/oversold |
+| **ROC** | Buy when the Rate of Change turns positive (momentum flips up); sell when it turns negative | Momentum breakouts |
+| **Ichimoku TK Cross** | Buy when the Tenkan-sen (conversion line) crosses above the Kijun-sen (base line); sell on the reverse cross | Multi-timeframe trends |
+| **Parabolic SAR** | Buy when price flips above the SAR dots (bullish phase); sell when it flips below (bearish phase) | Trailing stop trends |
+| **Williams %R** | Buy when %R climbs back above the oversold zone (−80); sell when it drops back below the overbought zone (−20) | Short-term reversals |
+| **ADX** | Buy when +DI crosses above −DI while ADX confirms a strong trend (> threshold); sell on the reverse DI cross | Strong-trend filters |
+| **Keltner Channel** | Buy when price bounces back above the lower Keltner Channel; sell when it breaks above the upper channel | Volatility breakouts |
+| **TRIX** | Buy when the triple-smoothed EMA rate of change crosses zero upward; sell on the downward zero-cross | Trend / noise filter |
+| **CMO** | Buy when the Chande Momentum Oscillator rises above the negative threshold; sell when it falls below the positive threshold | Momentum reversals |
+| **Hull MA Cross** | Buy when the fast Hull Moving Average crosses above the slow Hull MA; sell on the reverse cross | Low-lag trend following |
+| **VWAP Deviation** | Buy when price recovers from X% below VWAP; sell when it rises X% above VWAP | Intraday mean reversion |
+| **OBV Trend** | Buy when On-Balance Volume crosses above its SMA (volume confirms uptrend); sell on the downward cross | Volume-led breakouts |
+
+> **Tip for beginners:** Start with **MA Cross** (default), then try **RSI Bands** for choppy markets. Use the **Strategy Builder** ("Create your strategy") to get an AI-generated plain-English analysis tailored to your goals and risk tolerance.
+
+---
+
 ## Privacy
 
 - Market data is fetched directly from OKX / Binance — no data passes through any third-party server
