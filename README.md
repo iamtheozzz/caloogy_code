@@ -110,13 +110,26 @@ caloogy -r
 
 ## Terminal AI Agent
 
-`caloogy --chat` opens a terminal REPL powered by your configured AI provider (Gemini, OpenAI, or Claude). No server needs to be running — it works standalone.
+`caloogy --chat` opens a terminal REPL powered by your configured AI provider (Gemini, OpenAI, or Claude). No server needs to be running — it works completely standalone.
 
 ```bash
 caloogy --chat
 ```
 
-You can talk to it in plain English to:
+The AI has access to the following capabilities, all triggered through plain English:
+
+### Available tools
+
+| Tool | What it does |
+|---|---|
+| **Alert management** | Add, list, and remove price/indicator alerts |
+| **CSV export** | Fetch OHLCV price data and save to a local `.csv` file |
+| **Read file** | Read any file on your machine |
+| **Write file** | Create or overwrite a file (directories are created automatically) |
+| **List directory** | Browse the contents of any folder |
+| **Run command** | Execute any shell command and see its output |
+
+### Examples
 
 **Manage alerts**
 ```
@@ -137,6 +150,34 @@ AI:  Saved 100 candles to /Users/you/eth_daily.csv
 ```
 
 The CSV contains columns: `timestamp, open, high, low, close, volume`. Supported intervals: `1H`, `4H`, `1D`, `1W`.
+
+**Read and write files**
+```
+You: read my trading notes at ~/notes/btc.txt
+AI:  [contents of the file]
+
+You: save a summary of today's BTC analysis to ~/notes/analysis.md
+AI:  Written 340 chars to /Users/you/notes/analysis.md
+```
+
+**Browse directories**
+```
+You: what files are in my Downloads folder?
+AI:  /Users/you/Downloads
+     btc_1H_1234567890.csv
+     eth_daily.csv
+     report.pdf
+```
+
+**Run shell commands**
+```
+You: what's my current Python version?
+AI:  Python 3.11.4
+
+You: how much disk space do I have left?
+AI:  Filesystem  Size  Used  Avail  Use%
+     /dev/disk3  460G  210G   250G   46%
+```
 
 Type `exit` or `quit` to leave the chat.
 
