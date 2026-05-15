@@ -226,9 +226,73 @@ var _OKX_INST = {
 var _BN_INTERVAL = {'1H': '1h', '4H': '4h', '1D': '1d', '1W': '1w'};
 
 /* ── Real-time WebSocket (browser → OKX primary, Binance fallback) ── */
-var _ws      = null;
-var _ws1sBuf = [];
-var _wsSymbol = null;
+var _ws          = null;
+var _ws1sBuf     = [];
+var _wsSymbol    = null;
+var _liveSeries  = null;   // dedicated series for Live mode (separate from Q.series.candle)
+var _liveChartType = 'candle';
+
+function _createLiveSeries(type) {
+    if (_liveSeries) {
+        try { Q.charts.candle.removeSeries(_liveSeries); } catch {}
+        _liveSeries = null;
+    }
+    var ch = Q.charts.candle;
+    if (type === 'line') {
+        _liveSeries = ch.addLineSeries({
+            color: '#f97316', lineWidth: 2,
+            priceLineVisible: true, lastValueVisible: true,
+        });
+    } else if (type === 'area') {
+        _liveSeries = ch.addAreaSeries({
+            lineColor:    '#f97316',
+            topColor:     'rgba(249,115,22,0.25)',
+            bottomColor:  'rgba(249,115,22,0)',
+            lineWidth: 2,
+            priceLineVisible: true, lastValueVisible: true,
+        });
+    } else {
+        _liveSeries = ch.addCandlestickSeries({
+            upColor: '#0d9488', downColor: '#ef4444',
+            borderUpColor: '#0d9488', borderDownColor: '#ef4444',
+            wickUpColor:   '#0d9488', wickDownColor:   '#ef4444',
+        });
+    }
+}
+
+function _liveSeriesSetData(candles) {
+    if (!_liveSeries) return;
+    if (_liveChartType === 'candle') {
+        _liveSeries.setData(candles);
+    } else {
+        _liveSeries.setData(candles.map(function (c) {
+            return { time: c.time, value: c.close };
+        }));
+    }
+}
+
+function _liveSeriesUpdate(candle) {
+    if (!_liveSeries) return;
+    if (_liveChartType === 'candle') {
+        _liveSeries.update({
+            time: candle.time, open: candle.open,
+            high: candle.high, low: candle.low, close: candle.close,
+        });
+    } else {
+        _liveSeries.update({ time: candle.time, value: candle.close });
+    }
+}
+
+function _setLiveChartType(type) {
+    _liveChartType = type;
+    // Update active button state
+    document.querySelectorAll('#quantLiveTypePills .quant-pill').forEach(function (b) {
+        b.classList.toggle('active', b.dataset.livetype === type);
+    });
+    // Re-create series and re-populate with existing buffer
+    _createLiveSeries(type);
+    if (_ws1sBuf.length > 0) _liveSeriesSetData(_ws1sBuf);
+}
 
 function _wsSubscribe(symbol) {
     _ws1sBuf  = [];
@@ -311,30 +375,20 @@ function _onLiveCandle(candle) {
     if (dot) dot.style.display = 'inline';
 
     if (Q.bar === 'Live') {
-        // Live mode: maintain a rolling 300-candle buffer of 1s bars
+        // Maintain rolling 300-candle buffer
         var last = _ws1sBuf[_ws1sBuf.length - 1];
         if (!last || last.time !== candle.time) {
-            // New second — push candle, trim buffer
             _ws1sBuf.push(candle);
             if (_ws1sBuf.length > 300) _ws1sBuf.shift();
         } else {
-            // Same second — update in place (price moved within the second)
             _ws1sBuf[_ws1sBuf.length - 1] = candle;
         }
-        if (Q.series.candle) {
-            Q.series.candle.update({
-                time:  candle.time,
-                open:  candle.open,
-                high:  candle.high,
-                low:   candle.low,
-                close: candle.close,
-            });
-        }
+        _liveSeriesUpdate(candle);
         if (Q.series.volume) {
             Q.series.volume.update({ time: candle.time, value: candle.volume });
         }
     } else {
-        // Non-live mode: update the last (currently-forming) candle only
+        // Non-live mode: update the last forming candle only
         var lastCandle = Q.candles[Q.candles.length - 1];
         if (!lastCandle || !Q.series.candle) return;
         Q.series.candle.update({
@@ -1168,6 +1222,13 @@ function quantRenderAll(bt) {
 
 /* ── UI binding ─────────────────────────────────────────────────────── */
 function quantBindUI() {
+    // Live chart type switcher
+    document.querySelectorAll('#quantLiveTypePills .quant-pill').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            _setLiveChartType(btn.dataset.livetype);
+        });
+    });
+
     // Symbol pills (toolbar + extended panel)
     var _symSel = '#quantSymbolPills .quant-pill, #quantExtraSymbolPills .quant-pill';
     document.querySelectorAll(_symSel).forEach(function (btn) {
@@ -2974,11 +3035,17 @@ function initDragResize() {
 
 function _startLiveMode() {
     _ws1sBuf = [];
+    // Hide the regular candle series and indicators — Live uses its own series
     if (Q.series.candle) Q.series.candle.setData([]);
     if (Q.series.volume) Q.series.volume.setData([]);
     ['sma','ema','fastEma','slowEma','bbUpper','bbMiddle','bbLower'].forEach(function (k) {
         if (Q.series[k]) { try { Q.series[k].setData([]); } catch {} }
     });
+    // Show type switcher pills
+    var tp = document.getElementById('quantLiveTypePills');
+    if (tp) tp.style.display = 'flex';
+    // Create the live series for current type
+    _createLiveSeries(_liveChartType);
 
     // Fetch last 300 1s candles as history, then start WebSocket
     var symbol = Q.symbol;
@@ -2998,7 +3065,7 @@ function _startLiveMode() {
                 };
             });
             _ws1sBuf = candles;
-            if (Q.series.candle) Q.series.candle.setData(candles);
+            _liveSeriesSetData(candles);
             if (Q.series.volume) Q.series.volume.setData(candles.map(function (c) {
                 return { time: c.time, value: c.volume };
             }));
@@ -3018,7 +3085,7 @@ function _startLiveMode() {
                         };
                     });
                     _ws1sBuf = candles;
-                    if (Q.series.candle) Q.series.candle.setData(candles);
+                    _liveSeriesSetData(candles);
                     if (Q.series.volume) Q.series.volume.setData(candles.map(function (c) {
                         return { time: c.time, value: c.volume };
                     }));
@@ -3031,6 +3098,13 @@ function _startLiveMode() {
 function _stopLiveMode() {
     var dot = document.getElementById('quantLiveDot');
     if (dot) dot.style.display = 'none';
+    var tp = document.getElementById('quantLiveTypePills');
+    if (tp) tp.style.display = 'none';
+    // Remove the live series — regular Q.series.candle will be restored by quantFetch
+    if (_liveSeries) {
+        try { Q.charts.candle.removeSeries(_liveSeries); } catch {}
+        _liveSeries = null;
+    }
 }
 
 window._initQuantTab = function () {
