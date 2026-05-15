@@ -1357,6 +1357,7 @@ function quantBindUI() {
     }
     bindExpand('quantMoreAssetsBtn',  'quantMoreAssetsPanel');
     bindExpand('quantMoreStocksBtn',  'quantMoreStocksPanel');
+    bindExpand('quantMoreIndBtn',     'quantMoreIndPanel');
     bindExpand('quantMoreStratsBtn',  'quantMoreStratsPanel');
 
     // Run backtest

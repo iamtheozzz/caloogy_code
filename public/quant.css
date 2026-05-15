@@ -92,6 +92,11 @@ body.nav-quant .quant-section {
     cursor: pointer;
     padding: 0 4px;
 }
+.qt-ind-more {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
 .qt-ind-ctrl input[type="checkbox"] {
     width: 11px;
     height: 11px;
