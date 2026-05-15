@@ -2974,14 +2974,58 @@ function initDragResize() {
 
 function _startLiveMode() {
     _ws1sBuf = [];
-    // Clear chart and show empty state — candles will stream in via WebSocket
     if (Q.series.candle) Q.series.candle.setData([]);
     if (Q.series.volume) Q.series.volume.setData([]);
-    // Hide indicators that need history to be meaningful
     ['sma','ema','fastEma','slowEma','bbUpper','bbMiddle','bbLower'].forEach(function (k) {
         if (Q.series[k]) { try { Q.series[k].setData([]); } catch {} }
     });
-    _wsSubscribe(Q.symbol);
+
+    // Fetch last 300 1s candles as history, then start WebSocket
+    var symbol = Q.symbol;
+    var instId = _OKX_INST[symbol] || 'BTC-USDT';
+    var okxUrl = 'https://www.okx.com/api/v5/market/candles?instId=' + instId + '&bar=1s&limit=300';
+
+    fetch(okxUrl)
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+            if (j.code !== '0' || !j.data || j.data.length === 0) throw new Error('okx empty');
+            // OKX returns newest-first — reverse to oldest-first
+            var candles = j.data.slice().reverse().map(function (d) {
+                return {
+                    time:   Math.floor(+d[0] / 1000),
+                    open:   +d[1], high: +d[2], low: +d[3], close: +d[4],
+                    volume: +d[5],
+                };
+            });
+            _ws1sBuf = candles;
+            if (Q.series.candle) Q.series.candle.setData(candles);
+            if (Q.series.volume) Q.series.volume.setData(candles.map(function (c) {
+                return { time: c.time, value: c.volume };
+            }));
+        })
+        .catch(function () {
+            // Binance fallback
+            var bnUrl = 'https://api.binance.com/api/v3/klines?symbol=' + symbol + '&interval=1s&limit=300';
+            return fetch(bnUrl)
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!Array.isArray(data) || data.length === 0) return;
+                    var candles = data.map(function (k) {
+                        return {
+                            time:   Math.floor(+k[0] / 1000),
+                            open:   +k[1], high: +k[2], low: +k[3], close: +k[4],
+                            volume: +k[5],
+                        };
+                    });
+                    _ws1sBuf = candles;
+                    if (Q.series.candle) Q.series.candle.setData(candles);
+                    if (Q.series.volume) Q.series.volume.setData(candles.map(function (c) {
+                        return { time: c.time, value: c.volume };
+                    }));
+                });
+        })
+        .catch(function () {}) // 拉不到历史就空图开始，不影响 WebSocket
+        .finally(function () { _wsSubscribe(symbol); });
 }
 
 function _stopLiveMode() {
