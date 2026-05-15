@@ -298,8 +298,6 @@ function _wsSubscribe(symbol) {
     _ws1sBuf  = [];
     _wsSymbol = symbol;
     if (_ws) { _ws.close(); _ws = null; }
-    // Immediately wipe stale live series data so old coin data doesn't linger
-    if (_liveSeries) { try { _liveSeries.setData([]); } catch {} }
     _wsConnectOKX(symbol);
 }
 
@@ -3035,6 +3033,8 @@ function initDragResize() {
 
 function _startLiveMode() {
     _ws1sBuf = [];
+    // Wipe any existing live series immediately to prevent stale data on symbol switch
+    if (_liveSeries) { try { _liveSeries.setData([]); } catch {} }
     // Show LIVE dot immediately on click
     var dot = document.getElementById('quantLiveDot');
     if (dot) dot.style.display = 'inline';
