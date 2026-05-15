@@ -144,6 +144,57 @@ function startServer(cfg) {
         }
     });
 
+    // ── Python script runner ──────────────────────────────────────────────────
+    app.post('/api/run-python', (req, res) => {
+        const { code, candles } = req.body;
+        if (!code) return res.status(400).json({ error: 'code required' });
+
+        const { spawn }  = require('child_process');
+        const os         = require('os');
+        const fs         = require('fs');
+        const pathMod    = require('path');
+        const tmpFile    = pathMod.join(os.tmpdir(), `caloogy_${Date.now()}_${Math.random().toString(36).slice(2)}.py`);
+
+        try { fs.writeFileSync(tmpFile, code); } catch (e) {
+            return res.status(500).json({ error: 'Failed to write temp script: ' + e.message });
+        }
+
+        const input = JSON.stringify({ candles: candles || [] });
+        let stdout = '', stderr = '';
+
+        const proc = spawn('python3', [tmpFile]);
+        const timer = setTimeout(() => {
+            proc.kill();
+            fs.unlink(tmpFile, () => {});
+            res.status(400).json({ error: 'Timeout: script took longer than 10 seconds.' });
+        }, 10000);
+
+        proc.stdin.write(input);
+        proc.stdin.end();
+        proc.stdout.on('data', d => { stdout += d; });
+        proc.stderr.on('data', d => { stderr += d; });
+
+        proc.on('close', code => {
+            clearTimeout(timer);
+            fs.unlink(tmpFile, () => {});
+            if (res.headersSent) return;
+            if (code !== 0) return res.status(400).json({ error: stderr.trim() || 'Python exited with error.' });
+            try {
+                res.json(JSON.parse(stdout));
+            } catch {
+                res.status(400).json({ error: 'Script must end with print(json.dumps({...})). Output was:\n' + stdout.slice(0, 300) });
+            }
+        });
+
+        proc.on('error', err => {
+            clearTimeout(timer);
+            fs.unlink(tmpFile, () => {});
+            if (res.headersSent) return;
+            if (err.code === 'ENOENT') return res.status(500).json({ error: 'python3 not found. Install Python 3 from python.org.' });
+            res.status(500).json({ error: err.message });
+        });
+    });
+
     // ── Yahoo Finance proxy (avoids CORS for stock data) ─────────────────────
     app.get('/api/market/yahoo', async (req, res) => {
         const { symbol, interval, range } = req.query;

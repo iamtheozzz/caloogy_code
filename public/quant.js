@@ -1749,6 +1749,76 @@ var _PINE_DEFAULT = [
 '}',
 ].join('\n');
 
+var _editorLang = 'js';
+
+var _PYTHON_DEFAULT = [
+'import json, sys',
+'',
+'data    = json.load(sys.stdin)',
+'candles = data["candles"]          # list of {ts, open, high, low, close, volume}',
+'closes  = [c["close"]  for c in candles]',
+'highs   = [c["high"]   for c in candles]',
+'lows    = [c["low"]    for c in candles]',
+'times   = [c["ts"]//1000 for c in candles]  # seconds',
+'',
+'# ── Example: 20-bar moving average ──',
+'n   = 20',
+'sma = [None]*(n-1) + [sum(closes[i-n:i])/n for i in range(n, len(closes)+1)]',
+'',
+'plots   = [{"name":"SMA20","color":"#f59e0b","data":[',
+'    {"time": t, "value": v} for t, v in zip(times, sma) if v is not None',
+']}]',
+'markers = []',
+'',
+'print(json.dumps({"plots": plots, "markers": markers}))',
+].join('\n');
+
+function runPythonScript(code) {
+    var status  = document.getElementById('qtPineStatus');
+    var candles = Q.candles || [];
+    status.textContent = 'Running Python…';
+    status.className   = 'qt-pine-status';
+
+    Q.userSeries.forEach(function (s) { try { Q.charts.candle.removeSeries(s); } catch (e) {} });
+    Q.userSeries  = [];
+    Q.userMarkers = [];
+
+    fetch('/api/run-python', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ code: code, candles: candles }),
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (result) {
+        if (result.error) throw new Error(result.error);
+
+        var plots   = result.plots   || [];
+        var markers = result.markers || [];
+        var _ci = 0;
+
+        plots.forEach(function (p) {
+            var clr    = p.color || _PINE_AUTO_COLORS[_ci++ % _PINE_AUTO_COLORS.length];
+            var series = Q.charts.candle.addLineSeries({ color: clr, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+            series.setData(p.data || []);
+            Q.userSeries.push(series);
+        });
+
+        if (markers.length && Q.series.candle) {
+            Q.userMarkers = markers.slice().sort(function (a, b) { return a.time - b.time; });
+            Q.series.candle.setMarkers(Q.userMarkers);
+        }
+
+        var nP = plots.length, nM = markers.length;
+        status.textContent = 'OK — ' + nP + ' plot' + (nP !== 1 ? 's' : '') + ', ' + nM + ' marker' + (nM !== 1 ? 's' : '');
+        status.className   = 'qt-pine-status ok';
+    })
+    .catch(function (err) {
+        status.textContent = 'Error: ' + (err.message || String(err));
+        status.className   = 'qt-pine-status err';
+        console.error('[Python]', err);
+    });
+}
+
 var _PINE_TEMPLATES = {
     ema_cross: _PINE_DEFAULT,
     rsi_signal: [
@@ -2479,6 +2549,30 @@ function initPineEditor() {
         }
         e.target.value = '';
     });
+
+    // Lang tab switching (JS / Python)
+    var langTabs = document.querySelectorAll('.qt-lang-tab');
+    langTabs.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var lang = btn.getAttribute('data-lang');
+            if (lang === _editorLang) return;
+            _editorLang = lang;
+            langTabs.forEach(function (b) { b.classList.toggle('active', b === btn); });
+            if (lang === 'python') {
+                Q._pineEditor.setOption('mode', 'python');
+                if (Q._pineEditor.getValue() === _PINE_DEFAULT) {
+                    Q._pineEditor.setValue(_PYTHON_DEFAULT);
+                    Q._pineEditor.refresh();
+                }
+            } else {
+                Q._pineEditor.setOption('mode', 'javascript');
+                if (Q._pineEditor.getValue() === _PYTHON_DEFAULT) {
+                    Q._pineEditor.setValue(_PINE_DEFAULT);
+                    Q._pineEditor.refresh();
+                }
+            }
+        });
+    });
 }
 
 function _syncPineTheme(c) {
@@ -2495,8 +2589,15 @@ function _syncPineTheme(c) {
 function runPineScript() {
     if (!Q._pineEditor || !Q.charts.candle) return;
 
+    var code = Q._pineEditor.getValue();
+
+    if (_editorLang === 'python') {
+        runPythonScript(code);
+        return;
+    }
+
     // "caloogy" AI mode — any line containing only "caloogy" opens the AI chat panel
-    var rawLines = Q._pineEditor.getValue().split('\n');
+    var rawLines = code.split('\n');
     for (var li = 0; li < rawLines.length; li++) {
         var lt = rawLines[li].trim();
         if (/^caloogy\s*$/i.test(lt)) {
@@ -2519,7 +2620,6 @@ function runPineScript() {
     status.textContent = 'Running…';
     status.className = 'qt-pine-status';
 
-    var code    = Q._pineEditor.getValue();
     var candles = Q.candles;
     var closes  = candles.map(function (c) { return c.close; });
     var highs   = candles.map(function (c) { return c.high; });

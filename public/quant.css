@@ -602,6 +602,30 @@ body.nav-quant .quant-section {
 }
 .qt-pine-run:hover { background: #0f766e; }
 
+.qt-lang-tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--border-color);
+    border-radius: 5px;
+    padding: 2px;
+}
+.qt-lang-tab {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    border: none;
+    background: transparent;
+    border-radius: 3px;
+    padding: 3px 10px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: background 0.1s, color 0.1s;
+}
+.qt-lang-tab.active {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
 /* CodeMirror overrides */
 .qt-pine-wrap .CodeMirror {
     height: 165px;

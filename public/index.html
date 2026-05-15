@@ -231,6 +231,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5/lib/codemirror.css">
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5/lib/codemirror.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5/mode/javascript/javascript.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5/mode/python/python.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <link rel="stylesheet" href="quant.css">
 </head>
@@ -683,6 +684,10 @@
     </div>
     <div class="qt-pine-body" id="quantPineBody">
       <div class="qt-pine-body-bar">
+        <div class="qt-lang-tabs">
+          <button class="qt-lang-tab active" data-lang="js">JS</button>
+          <button class="qt-lang-tab" data-lang="python">Python</button>
+        </div>
         <select id="qtPineTemplate" class="qt-pine-select">
           <option value="">Examples…</option>
           <optgroup label="── Trend Following ──">
