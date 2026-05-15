@@ -225,6 +225,82 @@ var _OKX_INST = {
 /* Binance interval fallback map */
 var _BN_INTERVAL = {'1H': '1h', '4H': '4h', '1D': '1d', '1W': '1w'};
 
+/* ── US Stocks (Yahoo Finance via server proxy) ──────────────────────── */
+var _STOCK_SYMBOLS = {
+    AAPL:1, TSLA:1, NVDA:1, MSFT:1, GOOGL:1, AMZN:1, META:1, NFLX:1,
+    AMD:1, INTC:1, JPM:1, BAC:1, GS:1, DIS:1, UBER:1,
+    SPY:1, QQQ:1, IWM:1, GLD:1, XOM:1, V:1, MA:1,
+};
+function isStockSymbol(sym) { return !!_STOCK_SYMBOLS[sym]; }
+
+var _YF_RANGE = {
+    '1H': { interval: '60m', range: '200d' },
+    '4H': { interval: '60m', range: '730d' },
+    '1D': { interval: '1d',  range: 'max'  },
+    '1W': { interval: '1wk', range: 'max'  },
+};
+
+function aggregateTo4H(candles) {
+    var out = [];
+    for (var i = 0; i < candles.length; i += 4) {
+        var g = candles.slice(i, i + 4);
+        if (!g.length) continue;
+        out.push({
+            ts:     g[0].ts,
+            open:   g[0].open,
+            high:   Math.max.apply(null, g.map(function(c){ return c.high; })),
+            low:    Math.min.apply(null, g.map(function(c){ return c.low;  })),
+            close:  g[g.length - 1].close,
+            volume: g.reduce(function(s, c){ return s + c.volume; }, 0),
+        });
+    }
+    return out.slice(-300);
+}
+
+function _parseYahoo(result, bar) {
+    var ts = result.timestamp;
+    var q  = result.indicators.quote[0];
+    var candles = [];
+    for (var i = 0; i < ts.length; i++) {
+        if (q.close[i] == null) continue;
+        candles.push({
+            ts:     ts[i] * 1000,
+            open:   q.open[i]   || q.close[i],
+            high:   q.high[i]   || q.close[i],
+            low:    q.low[i]    || q.close[i],
+            close:  q.close[i],
+            volume: q.volume[i] || 0,
+        });
+    }
+    if (bar === '4H') candles = aggregateTo4H(candles);
+    return candles.slice(-300);
+}
+
+function fetchYahoo() {
+    var yf  = _YF_RANGE[Q.bar] || _YF_RANGE['1D'];
+    var url = '/api/market/yahoo?symbol=' + Q.symbol
+            + '&interval=' + yf.interval + '&range=' + yf.range;
+    fetch(url)
+        .then(function(r) { if (!r.ok) throw new Error('yahoo ' + r.status); return r.json(); })
+        .then(function(data) {
+            var result = data.chart && data.chart.result && data.chart.result[0];
+            if (!result) throw new Error('yahoo empty');
+            var candles = _parseYahoo(result, Q.bar);
+            if (candles.length < 2) throw new Error('yahoo insufficient data');
+            var key = Q.symbol + '_' + Q.bar;
+            _qCacheSet(key, candles);
+            Q.candles = candles;
+            quantRenderAll();
+            if (Q._onFetchDone) { var cb = Q._onFetchDone; Q._onFetchDone = null; cb(); }
+        })
+        .catch(function(err) {
+            console.error('[Quant] Yahoo failed:', err);
+            showLoading(true, 'Failed to load data');
+            Q._onFetchDone = null;
+        })
+        .finally(function() { Q.loading = false; });
+}
+
 function _parseOkx(data) {
     /* OKX: [ts_ms, open, high, low, close, vol, ...], newest-first */
     return data.slice().reverse().map(function (k) {
@@ -251,6 +327,8 @@ function quantFetch() {
 
     Q.loading = true;
     showLoading(true);
+
+    if (isStockSymbol(Q.symbol)) { fetchYahoo(); return; }
 
     var instId = _OKX_INST[Q.symbol] || 'BTC-USDT';
     var okxUrl = 'https://www.okx.com/api/v5/market/candles'
@@ -1046,8 +1124,8 @@ function quantRenderAll(bt) {
 
 /* ── UI binding ─────────────────────────────────────────────────────── */
 function quantBindUI() {
-    // Symbol pills (toolbar + extended panel)
-    var _symSel = '#quantSymbolPills .quant-pill, #quantExtraSymbolPills .quant-pill';
+    // Symbol pills (toolbar + extended panel + stocks)
+    var _symSel = '#quantSymbolPills .quant-pill, #quantExtraSymbolPills .quant-pill, #quantStockPills .quant-pill, #quantExtraStockPills .quant-pill';
     document.querySelectorAll(_symSel).forEach(function (btn) {
         btn.addEventListener('click', function () {
             document.querySelectorAll(_symSel).forEach(function (b) { b.classList.remove('active'); });
@@ -1278,6 +1356,7 @@ function quantBindUI() {
         });
     }
     bindExpand('quantMoreAssetsBtn',  'quantMoreAssetsPanel');
+    bindExpand('quantMoreStocksBtn',  'quantMoreStocksPanel');
     bindExpand('quantMoreStratsBtn',  'quantMoreStratsPanel');
 
     // Run backtest

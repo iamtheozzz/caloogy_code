@@ -144,6 +144,25 @@ function startServer(cfg) {
         }
     });
 
+    // ── Yahoo Finance proxy (avoids CORS for stock data) ─────────────────────
+    app.get('/api/market/yahoo', async (req, res) => {
+        const { symbol, interval, range } = req.query;
+        if (!symbol || !interval || !range) {
+            return res.status(400).json({ error: 'symbol, interval, range required' });
+        }
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`
+            + `?interval=${interval}&range=${range}&includePrePost=false&events=`;
+        try {
+            const r = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+            });
+            if (!r.ok) throw new Error('yahoo ' + r.status);
+            res.json(await r.json());
+        } catch (e) {
+            res.status(502).json({ error: e.message });
+        }
+    });
+
     // ── Alerts API ────────────────────────────────────────────────────────────
     app.get('/api/alerts', (req, res) => {
         res.json(monitor.readAlerts());
