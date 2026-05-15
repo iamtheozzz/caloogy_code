@@ -3038,6 +3038,10 @@ function _startLiveMode() {
     // Show LIVE dot immediately on click
     var dot = document.getElementById('quantLiveDot');
     if (dot) dot.style.display = 'inline';
+    // Hide SMA / EMA / BB indicator controls
+    document.querySelectorAll('.qt-ind-ctrl').forEach(function (el) {
+        el.style.display = 'none';
+    });
     // Close and disable RSI / MACD panels
     ['quantRsiDiv', 'quantMacdDiv'].forEach(function (id) {
         var el = document.getElementById(id);
@@ -3117,6 +3121,10 @@ function _stopLiveMode() {
     if (dot) dot.style.display = 'none';
     var tp = document.getElementById('quantLiveTypePills');
     if (tp) tp.style.display = 'none';
+    // Restore SMA / EMA / BB indicator controls
+    document.querySelectorAll('.qt-ind-ctrl').forEach(function (el) {
+        el.style.display = '';
+    });
     // Re-enable RSI / MACD buttons
     ['quantRsiToggle', 'quantMacdToggle'].forEach(function (id) {
         var btn = document.getElementById(id);
