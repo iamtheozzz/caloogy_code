@@ -690,42 +690,79 @@
         </div>
         <select id="qtPineTemplate" class="qt-pine-select">
           <option value="">Examples…</option>
-          <optgroup label="── Trend Following ──">
-            <option value="ema_cross">EMA Cross</option>
-            <option value="triple_ema">Triple EMA System</option>
-            <option value="adx_filter">ADX Trend Filter</option>
-            <option value="donchian_turtle">Donchian Breakout (Turtle)</option>
+          <optgroup label="── JS: Trend Following ──">
+            <option value="ema_cross">EMA Cross [JS]</option>
+            <option value="triple_ema">Triple EMA System [JS]</option>
+            <option value="adx_filter">ADX Trend Filter [JS]</option>
+            <option value="donchian_turtle">Donchian Breakout [JS]</option>
           </optgroup>
-          <optgroup label="── Mean Reversion ──">
-            <option value="bb_bands">Bollinger Bands</option>
-            <option value="bb_squeeze">BB Squeeze (Keltner)</option>
-            <option value="zscore">Z-Score Reversion</option>
-            <option value="vwap_dev">VWAP Deviation</option>
+          <optgroup label="── JS: Mean Reversion ──">
+            <option value="bb_bands">Bollinger Bands [JS]</option>
+            <option value="bb_squeeze">BB Squeeze [JS]</option>
+            <option value="zscore">Z-Score Reversion [JS]</option>
+            <option value="vwap_dev">VWAP Deviation [JS]</option>
           </optgroup>
-          <optgroup label="── Momentum / Oscillator ──">
-            <option value="rsi_signal">RSI Signal</option>
-            <option value="macd_rsi">MACD × RSI Confluence</option>
-            <option value="supertrend_rsi">Supertrend + RSI Filter</option>
-            <option value="hull_momentum">Hull MA Momentum</option>
+          <optgroup label="── JS: Momentum ──">
+            <option value="rsi_signal">RSI Signal [JS]</option>
+            <option value="macd_rsi">MACD × RSI [JS]</option>
+            <option value="supertrend_rsi">Supertrend + RSI [JS]</option>
+            <option value="hull_momentum">Hull MA Momentum [JS]</option>
           </optgroup>
-          <optgroup label="── Volume / Multi-Factor ──">
-            <option value="obv_confirm">OBV Trend Confirmation</option>
-            <option value="ichimoku">Ichimoku Cloud</option>
+          <optgroup label="── JS: Volume / Multi-Factor ──">
+            <option value="obv_confirm">OBV Confirmation [JS]</option>
+            <option value="ichimoku">Ichimoku Cloud [JS]</option>
           </optgroup>
-          <optgroup label="── Professional / Research ──">
-            <option value="linear_reg">Linear Regression Channel</option>
-            <option value="rsi_divergence">RSI Divergence Detector</option>
-            <option value="chandelier_exit">Chandelier Exit (ATR Stop)</option>
-            <option value="heikin_ashi">Heikin-Ashi Trend Filter</option>
-            <option value="volume_rsi">Volume-Weighted RSI</option>
-            <option value="multi_factor">Multi-Factor Composite</option>
-            <option value="williams_fractal">Williams Fractal + Alligator</option>
-            <option value="elder_impulse">Elder Impulse System</option>
-            <option value="inside_bar">Inside Bar Breakout</option>
-            <option value="mean_rev_backtest">Mean Reversion + Equity Curve</option>
+          <optgroup label="── JS: Professional ──">
+            <option value="linear_reg">Linear Regression [JS]</option>
+            <option value="rsi_divergence">RSI Divergence [JS]</option>
+            <option value="chandelier_exit">Chandelier Exit [JS]</option>
+            <option value="heikin_ashi">Heikin-Ashi [JS]</option>
+            <option value="volume_rsi">Volume-Weighted RSI [JS]</option>
+            <option value="multi_factor">Multi-Factor [JS]</option>
+            <option value="williams_fractal">Williams Fractal [JS]</option>
+            <option value="elder_impulse">Elder Impulse [JS]</option>
+            <option value="inside_bar">Inside Bar [JS]</option>
+            <option value="mean_rev_backtest">Mean Reversion Backtest [JS]</option>
+          </optgroup>
+          <optgroup label="── Python: Trend ──">
+            <option value="py_ema_cross">🐍 EMA Cross</option>
+            <option value="py_triple_ema">🐍 Triple EMA System</option>
+            <option value="py_adx_filter">🐍 ADX Trend Filter</option>
+            <option value="py_donchian_turtle">🐍 Donchian Breakout (Turtle)</option>
+          </optgroup>
+          <optgroup label="── Python: Mean Reversion ──">
+            <option value="py_bb_bands">🐍 Bollinger Bands</option>
+            <option value="py_bb_squeeze">🐍 BB Squeeze (Keltner)</option>
+            <option value="py_zscore">🐍 Z-Score Reversion</option>
+            <option value="py_vwap_dev">🐍 VWAP Deviation</option>
+          </optgroup>
+          <optgroup label="── Python: Momentum ──">
+            <option value="py_rsi_signal">🐍 RSI Signal</option>
+            <option value="py_macd_rsi">🐍 MACD × RSI Confluence</option>
+            <option value="py_supertrend_rsi">🐍 Supertrend + RSI Filter</option>
+            <option value="py_hull_momentum">🐍 Hull MA Momentum</option>
+          </optgroup>
+          <optgroup label="── Python: Volume / Multi-Factor ──">
+            <option value="py_obv_confirm">🐍 OBV Trend Confirmation</option>
+            <option value="py_ichimoku">🐍 Ichimoku Cloud</option>
+            <option value="py_volume_rsi">🐍 Volume-Weighted RSI</option>
+            <option value="py_multi_factor">🐍 Multi-Factor Composite</option>
+          </optgroup>
+          <optgroup label="── Python: Professional ──">
+            <option value="py_linear_reg">🐍 Linear Regression Channel</option>
+            <option value="py_rsi_divergence">🐍 RSI Divergence Detector</option>
+            <option value="py_chandelier_exit">🐍 Chandelier Exit (ATR Stop)</option>
+            <option value="py_heikin_ashi">🐍 Heikin-Ashi Trend Filter</option>
+            <option value="py_williams_fractal">🐍 Williams Fractal + Alligator</option>
+            <option value="py_elder_impulse">🐍 Elder Impulse System</option>
+            <option value="py_inside_bar">🐍 Inside Bar Breakout</option>
+            <option value="py_mean_rev_backtest">🐍 Mean Reversion + Equity Curve</option>
           </optgroup>
         </select>
         <button id="qtPineRun" class="qt-pine-run">&#9654; Run</button>
+        <button id="qtPineDock" class="qt-pine-dock" title="Move editor to right panel">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
       </div>
       <div id="qtPineEditorRow">
         <div id="qtPineEditor"></div>

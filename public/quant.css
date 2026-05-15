@@ -602,6 +602,32 @@ body.nav-quant .quant-section {
 }
 .qt-pine-run:hover { background: #0f766e; }
 
+.qt-pine-dock {
+    margin-left: auto;
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    transition: background 0.1s, color 0.1s;
+}
+.qt-pine-dock:hover { background: var(--border-color); color: var(--text-primary); }
+.qt-pine-dock.docked svg { transform: rotate(180deg); }
+
+/* Docked-right: editor becomes a right sidebar */
+.qt-pine-wrap.qt-pine-docked {
+    width: 400px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--border-color);
+    border-top: none;
+}
+
 .qt-lang-tabs {
     display: flex;
     gap: 2px;

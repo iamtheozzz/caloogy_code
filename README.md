@@ -272,16 +272,134 @@ Sent by Caloogy Code running on your local machine.
 
 ## Features
 
-- **Live candlestick charts** — BTC, ETH, SOL, BNB and 29 more coins, powered by OKX & Binance public APIs
+- **Candlestick charts** — 30+ crypto coins (BTC, ETH, SOL, BNB…) via OKX & Binance, plus 22 US stocks/ETFs via Yahoo Finance
 - **Timeframes** — 1H, 4H, 1D, 1W
-- **Built-in indicators** — SMA, EMA, Bollinger Bands, RSI, MACD (open by default)
+- **Built-in indicators** — SMA, EMA, Bollinger Bands, RSI, MACD
 - **19 backtest strategies** — MA Cross, RSI Bands, BB Bounce, Supertrend, Ichimoku, Donchian, Stochastic, and more
 - **Strategy builder** — answer a few questions, get an AI-generated investment analysis in plain English
-- **Caloogy Code editor** — write custom JavaScript indicators and run them live on the chart
+- **Caloogy Code editor** — write custom JavaScript **or Python** indicators and run them live on the chart; 48 built-in examples (24 JS + 24 Python)
 - **AI chat** — describe any strategy in plain English → AI writes the code and runs it instantly
-- **Price & indicator alerts** — background monitoring with Gmail, Discord, and Telegram notifications
+- **Price & indicator alerts** — background monitoring for crypto and US stocks, with Gmail, Discord, and Telegram notifications
 - **Light / dark mode** toggle
 - **Auto coin switching** — mention ETH or SOL in your AI prompt and the chart switches automatically
+
+---
+
+## US Stock Charts
+
+Caloogy Code supports US stocks and ETFs alongside crypto — no API key required. Data is fetched from the Yahoo Finance public API via a local proxy (no CORS issues).
+
+### Supported symbols
+
+| Category | Symbols |
+|----------|---------|
+| **Mega-cap tech** | AAPL, TSLA, NVDA, MSFT, GOOGL, AMZN, META, NFLX, AMD, INTC |
+| **Finance** | JPM, BAC, GS |
+| **Other** | DIS, UBER, XOM, V, MA |
+| **Index ETFs** | SPY, QQQ, IWM |
+| **Commodity ETF** | GLD |
+
+Click any stock pill in the top bar (AAPL, TSLA, NVDA, MSFT, GOOGL…) or open the **More stocks** dropdown to switch. All timeframes work:
+
+| Timeframe | Data source | History |
+|-----------|-------------|---------|
+| **1H** | Yahoo Finance 60-minute bars | ~200 days |
+| **4H** | 1H bars aggregated every 4 candles | ~730 days |
+| **1D** | Yahoo Finance daily bars | Full history |
+| **1W** | Yahoo Finance weekly bars | Full history |
+
+> **Note:** Stock data only covers regular trading hours (09:30–16:00 ET, Mon–Fri). Null bars (pre/post-market) are filtered automatically.
+
+All built-in indicators, backtest strategies, Caloogy Code editor, and alerts work identically for stocks and crypto.
+
+### Stock alerts
+
+The Alerts panel and background monitor both support US stocks. Add an alert for AAPL, NVDA, or any other supported symbol exactly the same way as for BTC or ETH — just select the stock from the **Coin** dropdown in the Add Alert form.
+
+---
+
+## Caloogy Code Editor
+
+The built-in code editor lets you write custom indicator scripts that run directly on the current chart. The editor supports two languages — **JavaScript** and **Python** — switchable via the JS / Python tab at the top.
+
+### JavaScript mode
+
+Scripts run in the browser sandbox. You have access to:
+
+```js
+// Data arrays (one value per candle)
+candles  // [{ts, open, high, low, close, volume}, ...]
+closes, highs, lows, opens, volumes  // number[]
+times    // unix seconds[]
+
+// Built-in math helpers
+sma(array, period)                   // Simple Moving Average
+ema(array, period)                   // Exponential Moving Average
+calcRsi(array, period)               // RSI
+bollinger(array, period, mult)       // {upper, middle, lower}[]
+calcMacd(array, fast, slow, sig)     // {macd, signal}[]
+calcADX(candles, period)             // {adx, diP, diM}[]
+calcVWAP(candles, period)            // number[]
+calcOBV(candles)                     // number[]
+calcSupertrend(candles, period, mult) // {dir}[]
+calcHullMA(array, period)            // number[]
+// … and more
+
+// Output functions
+plot(name, array, color?)   // overlay a line on the chart
+mark(index, "buy"|"sell", text?)  // add an arrow marker
+```
+
+Type `caloogy` on any line and press Enter to open the AI chat and describe what you want — the AI will write the script for you.
+
+**24 built-in JS examples** cover: EMA Cross, Triple EMA, ADX Filter, Donchian Turtle, Bollinger Bands, BB Squeeze, Z-Score Reversion, VWAP Deviation, RSI Signal, MACD × RSI, Supertrend + RSI, Hull MA Momentum, OBV Confirmation, Ichimoku Cloud, Linear Regression Channel, RSI Divergence, Chandelier Exit, Heikin-Ashi, Volume-Weighted RSI, Multi-Factor Composite, Williams Fractal + Alligator, Elder Impulse System, Inside Bar Breakout, Mean Reversion Backtest.
+
+### Python mode
+
+Click the **Python** tab to switch to Python. Scripts run server-side via `python3` — you must have Python 3 installed (`python3 --version` to check).
+
+Scripts receive candle data on **stdin** as JSON and must print a JSON result to **stdout**:
+
+```python
+import json, sys, math
+
+d       = json.load(sys.stdin)
+candles = d["candles"]   # list of {ts, open, high, low, close, volume}
+closes  = [c["close"]  for c in candles]
+highs   = [c["high"]   for c in candles]
+lows    = [c["low"]    for c in candles]
+opens   = [c["open"]   for c in candles]
+volumes = [c["volume"] for c in candles]
+times   = [c["ts"]//1000 for c in candles]   # unix seconds
+
+# --- your analysis here ---
+
+plots = [
+    {
+        "name":  "My Line",
+        "color": "#f59e0b",
+        "data":  [{"time": t, "value": v} for t, v in zip(times, my_values) if v is not None],
+    }
+]
+markers = [
+    # {"time": t, "position": "belowBar", "color": "#0d9488",
+    #  "shape": "arrowUp", "text": "B"}
+]
+
+print(json.dumps({"plots": plots, "markers": markers}))
+```
+
+**Rules:**
+- Use only Python standard library (`json`, `sys`, `math`, etc.) — or any packages you have installed locally
+- The final `print(json.dumps(...))` is required; any other stdout output will cause a parse error
+- Scripts time out after **10 seconds**
+- `stderr` output is shown in the status bar on error
+
+**24 built-in Python examples** mirror all JS examples exactly — select any `🐍` entry from the Examples dropdown.
+
+### Dock the editor to the right panel
+
+Click the **`›`** button (right of the Run button) to move the Caloogy Code editor from the bottom of the page to a right-side panel. Click again to move it back. This frees up vertical space for the chart while keeping the editor visible.
 
 ---
 
