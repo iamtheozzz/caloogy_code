@@ -232,6 +232,7 @@
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5/lib/codemirror.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5/mode/javascript/javascript.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5/mode/python/python.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5/mode/sql/sql.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <link rel="stylesheet" href="quant.css">
 </head>
@@ -475,6 +476,7 @@
         <button class="qt-sub-toggle qt-ai-toggle" id="quantAiToggle">AI</button>
         <button class="qt-sub-toggle" id="quantRsiToggle">RSI</button>
         <button class="qt-sub-toggle" id="quantMacdToggle">MACD</button>
+        <button class="qt-sub-toggle" id="quantDataToggle">Data</button>
       </div>
       <button class="qt-run" id="quantRunBacktest">Backtest</button>
     </div>
@@ -687,6 +689,7 @@
         <div class="qt-lang-tabs">
           <button class="qt-lang-tab active" data-lang="js">JS</button>
           <button class="qt-lang-tab" data-lang="python">Python</button>
+          <button class="qt-lang-tab" data-lang="sql">SQL</button>
         </div>
         <select id="qtPineTemplate" class="qt-pine-select">
           <option value="">Examples…</option>
@@ -721,7 +724,7 @@
         <div id="qtPineEditor"></div>
       </div>
       <div id="qtPineStatus" class="qt-pine-status"></div>
-      <pre id="qtPineResults" class="qt-pine-results quant-hidden"></pre>
+      <div id="qtPineResults" class="qt-pine-results quant-hidden"></div>
     </div>
   </div>
   </div><!-- /.qt-main-col -->
@@ -734,6 +737,77 @@
       <button id="qtAiSend" class="qt-ai-send">Send</button>
     </div>
     <button id="qtAiExit" class="qt-ai-exit">&#x2715; Close chat</button>
+  </div>
+  <!-- ── Data Manager panel (full-screen overlay) ── -->
+  <div id="quantDataPanel" class="qt-data-panel quant-hidden">
+    <div class="qt-data-hdr">
+      <button id="quantDataBack" class="qt-data-back">&#8592; Back to Chart</button>
+      <span class="qt-data-title">Data Manager</span>
+      <span id="qtDbSize" class="qt-data-size"></span>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="qt-data-toolbar">
+      <button id="qtDataUploadBtn" class="qt-data-btn qt-data-btn-primary">+ Upload CSV</button>
+      <button id="qtDataSyncBtn"   class="qt-data-btn">&#8635; Sync All</button>
+      <input id="qtDataCsvInput"   type="file" accept=".csv" style="display:none">
+    </div>
+
+    <!-- Upload form (hidden until file selected) -->
+    <div id="qtDataUploadForm" class="qt-data-upload-form quant-hidden">
+      <div class="qt-data-upload-row">
+        <label>Symbol <input id="qtDataSymbol" class="qt-data-input" type="text" placeholder="e.g. AAPL" maxlength="20"></label>
+        <label>Interval
+          <select id="qtDataInterval" class="qt-data-input">
+            <option value="1D">1D</option>
+            <option value="1H">1H</option>
+            <option value="4H">4H</option>
+            <option value="1W">1W</option>
+            <option value="custom">custom</option>
+          </select>
+        </label>
+        <button id="qtDataImportBtn" class="qt-data-btn qt-data-btn-primary">Validate &amp; Import</button>
+        <button id="qtDataCancelBtn" class="qt-data-btn">Cancel</button>
+      </div>
+      <div id="qtDataImportStatus" class="qt-data-import-status"></div>
+    </div>
+
+    <!-- Symbol table -->
+    <div class="qt-data-table-wrap">
+      <table class="qt-data-table" id="qtDataTable">
+        <thead>
+          <tr>
+            <th>Symbol</th><th>Interval</th><th>Source</th>
+            <th>Rows</th><th>First Bar</th><th>Last Bar</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="qtDataTableBody">
+          <tr><td colspan="7" class="qt-data-empty">No data yet. Upload a CSV or wait for monitor to sync alerts.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Preview section -->
+    <div id="qtDataPreviewWrap" class="qt-data-preview-wrap quant-hidden">
+      <div class="qt-data-preview-hdr">
+        <span id="qtDataPreviewTitle">Preview</span>
+        <button id="qtDataExportBtn" class="qt-data-btn">&#8595; Export CSV</button>
+      </div>
+      <div class="qt-data-preview-scroll">
+        <table class="qt-sql-table" id="qtDataPreviewTable"></table>
+      </div>
+    </div>
+
+    <!-- SQL console -->
+    <div class="qt-data-sql-wrap">
+      <div class="qt-data-sql-hdr">SQL Console <span class="qt-data-sql-hint">(DuckDB — SELECT / SHOW / DESCRIBE)</span></div>
+      <textarea id="qtDataSqlInput" class="qt-data-sql-input" rows="4"
+        placeholder="SELECT symbol, interval, COUNT(*) AS rows FROM candles GROUP BY 1,2 ORDER BY 1"></textarea>
+      <div class="qt-data-sql-bar">
+        <button id="qtDataSqlRun" class="qt-data-btn qt-data-btn-primary">&#9654; Run</button>
+      </div>
+      <div id="qtDataSqlResult" class="qt-data-sql-result"></div>
+    </div>
   </div>
   </div><!-- /.qt-quant-body -->
 

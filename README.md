@@ -318,9 +318,83 @@ The Alerts panel and background monitor both support US stocks. Add an alert for
 
 ---
 
+## Local Database
+
+Caloogy Code includes an embedded **DuckDB** database that automatically persists all OHLCV data your instance fetches. No server process required — data lives in a single file at `~/.caloogy/market.duckdb`.
+
+### How data gets written
+
+The alert monitor runs every 5 minutes and fetches candles for all symbols with active alerts. Each fetch is automatically stored in the database. You can also trigger a manual sync from the Data Manager panel.
+
+### Data Manager panel
+
+Click **Data** in the toolbar to open the full-screen Data Manager:
+
+| Feature | Description |
+|---------|-------------|
+| **Symbol table** | Shows all stored symbol/interval combos with row count and date range |
+| **Upload CSV** | Import any OHLCV CSV file — columns auto-detected (date, open, high, low, close, volume) |
+| **Preview** | View the last 20 rows of any dataset |
+| **Export CSV** | Download any dataset as CSV |
+| **Sync All** | Force-refresh all API-sourced datasets |
+| **SQL Console** | Run read-only SQL queries against the database |
+
+**CSV column names** are auto-detected. Supported variants:
+- Date: `date`, `datetime`, `timestamp`, `time`, `ts`
+- OHLCV: `open/o`, `high/h`, `low/l`, `close/c/price`, `volume/vol/v` (volume optional)
+
+If a column name isn't recognised, the upload fails with a clear error message telling you what to rename.
+
+### SQL Console (editor + Data Manager)
+
+The code editor has a third **SQL** tab that lets you query the database directly. DuckDB's SQL is compatible with MySQL and PostgreSQL syntax — `GROUP BY`, window functions, CTEs (`WITH`), and `JOIN` are all supported.
+
+```sql
+-- Example: row counts per symbol
+SELECT symbol, interval, COUNT(*) AS rows,
+       strftime(to_timestamp(MIN(ts)/1000), '%Y-%m-%d') AS first_bar,
+       strftime(to_timestamp(MAX(ts)/1000), '%Y-%m-%d') AS last_bar
+FROM candles
+GROUP BY symbol, interval
+ORDER BY symbol, interval
+```
+
+SQL queries are **read-only** — only `SELECT`, `SHOW`, `DESCRIBE`, and `EXPLAIN` are allowed.
+
+### Python access from Caloogy Code editor
+
+Install the optional Python dependencies once:
+
+```bash
+pip install duckdb pandas
+```
+
+Then in any Python script in the editor you have access to these helpers (auto-imported):
+
+```python
+# Load full history as a Pandas DataFrame (indexed by datetime)
+df = load_db('AAPL', '1D')
+
+# List all stored symbols
+meta = list_symbols()
+
+# Data cleaning
+df = clean_candles(df)           # drop nulls, deduplicate, sort
+df = resample_ohlcv(df, '1W')    # resample 1D → 1W
+
+# Vectorized backtest
+signal = (df['close'] > df['close'].rolling(20).mean()).astype(int) * 2 - 1
+result = SimpleBacktest(df, signal, fee=0.001).run()
+print(json.dumps({'log': f"Sharpe={result['sharpe']}, Return={result['total_ret']:.1%}"}))
+```
+
+The database file path is exposed to Python scripts as the environment variable `CALOOGY_DB_PATH`.
+
+---
+
 ## Caloogy Code Editor
 
-The built-in code editor lets you write custom indicator scripts that run directly on the current chart. The editor supports two languages — **JavaScript** and **Python** — switchable via the JS / Python tab at the top.
+The built-in code editor lets you write custom indicator scripts that run directly on the current chart. The editor supports three languages — **JavaScript**, **Python**, and **SQL** — switchable via the tabs at the top.
 
 ### JavaScript mode
 

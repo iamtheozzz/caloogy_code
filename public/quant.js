@@ -1802,6 +1802,13 @@ var _PY_H = [
 '    for i in range(period, n): r[i] = (r[i-1]*(period-1) + tr[i]) / period',
 '    return r',
 '',
+'import os as _os, sys as _sys2',
+'_sys2.path.insert(0, _os.path.expanduser("~/.caloogy"))',
+'try:',
+'    from caloogy_utils import load_db, list_symbols, clean_candles, resample_ohlcv, SimpleBacktest',
+'except ImportError:',
+'    pass',
+'',
 ].join('\n');
 
 var _PYTHON_DEFAULT = [
@@ -1832,7 +1839,7 @@ function runPythonScript(code) {
     var candles   = Q.candles || [];
     status.textContent = 'Running Python…';
     status.className   = 'qt-pine-status';
-    if (resultsEl) { resultsEl.textContent = ''; resultsEl.classList.add('quant-hidden'); }
+    if (resultsEl) { resultsEl.innerHTML = ''; resultsEl.classList.add('quant-hidden'); }
 
     Q.userSeries.forEach(function (s) { try { Q.charts.candle.removeSeries(s); } catch (e) {} });
     Q.userSeries  = [];
@@ -1866,15 +1873,83 @@ function runPythonScript(code) {
         var nP = plots.length, nM = markers.length;
         status.textContent = 'OK — ' + nP + ' plot' + (nP !== 1 ? 's' : '') + ', ' + nM + ' marker' + (nM !== 1 ? 's' : '');
         status.className   = 'qt-pine-status ok';
-        if (resultsEl && result.log) {
-            resultsEl.textContent = result.log;
-            resultsEl.classList.remove('quant-hidden');
-        }
+        if (result.log) { showResults(result.log, false); }
     })
     .catch(function (err) {
         status.textContent = 'Error: ' + (err.message || String(err));
         status.className   = 'qt-pine-status err';
         console.error('[Python]', err);
+    });
+}
+
+var _SQL_DEFAULT = [
+'-- Query your local candles database',
+'-- DuckDB SQL — compatible with MySQL / PostgreSQL syntax',
+'',
+'SELECT symbol, interval,',
+'       COUNT(*)                             AS rows,',
+"       strftime(to_timestamp(MIN(ts)/1000), '%Y-%m-%d') AS first_bar,",
+"       strftime(to_timestamp(MAX(ts)/1000), '%Y-%m-%d') AS last_bar",
+'FROM candles',
+'GROUP BY symbol, interval',
+'ORDER BY symbol, interval',
+].join('\n');
+
+function _esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function showResults(content, isHTML) {
+    var el = document.getElementById('qtPineResults');
+    if (!el) return;
+    if (isHTML) { el.innerHTML = content; } else { el.textContent = content; }
+    el.classList.remove('quant-hidden');
+}
+
+function showSQLResult(columns, rows, total) {
+    if (!columns || !columns.length) { showResults('Query returned 0 rows.', false); return; }
+    var html = '<table class="qt-sql-table"><thead><tr>';
+    columns.forEach(function (c) { html += '<th>' + _esc(c) + '</th>'; });
+    html += '</tr></thead><tbody>';
+    (rows || []).forEach(function (row) {
+        html += '<tr>';
+        row.forEach(function (cell) {
+            html += '<td>' + _esc(cell == null ? 'NULL' : String(cell)) + '</td>';
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    if (total > (rows || []).length) {
+        html += '<div class="qt-sql-note">Showing ' + (rows || []).length + ' of ' + total + ' rows — refine with LIMIT</div>';
+    }
+    showResults(html, true);
+}
+
+function runSQLQuery() {
+    var sql       = Q._pineEditor ? Q._pineEditor.getValue().trim() : '';
+    var status    = document.getElementById('qtPineStatus');
+    var resultsEl = document.getElementById('qtPineResults');
+    if (!sql) return;
+    status.textContent = 'Running SQL…';
+    status.className   = 'qt-pine-status';
+    if (resultsEl) { resultsEl.innerHTML = ''; resultsEl.classList.add('quant-hidden'); }
+
+    fetch('/api/db/query', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ sql: sql }),
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        showSQLResult(data.columns, data.rows, data.total);
+        var n = (data.rows || []).length;
+        status.textContent = 'OK — ' + n + ' row' + (n !== 1 ? 's' : '');
+        status.className   = 'qt-pine-status ok';
+    })
+    .catch(function (err) {
+        status.textContent = 'Error: ' + (err.message || String(err));
+        status.className   = 'qt-pine-status err';
     });
 }
 
@@ -2381,27 +2456,37 @@ function initPineEditor() {
         e.target.value = '';
     });
 
-    // Lang tab switching (JS / Python)
-    var langTabs = document.querySelectorAll('.qt-lang-tab');
+    // Lang tab switching (JS / Python / SQL)
+    var langTabs    = document.querySelectorAll('.qt-lang-tab');
+    var tmplSelect  = document.getElementById('qtPineTemplate');
+    var tmplWrapper = tmplSelect ? tmplSelect.parentElement : null;
     langTabs.forEach(function (btn) {
         btn.addEventListener('click', function () {
             var lang = btn.getAttribute('data-lang');
             if (lang === _editorLang) return;
+            var prev = _editorLang;
             _editorLang = lang;
             langTabs.forEach(function (b) { b.classList.toggle('active', b === btn); });
             if (lang === 'python') {
                 Q._pineEditor.setOption('mode', 'python');
-                if (Q._pineEditor.getValue() === _PINE_DEFAULT) {
+                if (tmplWrapper) tmplWrapper.style.display = '';
+                if (Q._pineEditor.getValue() === _PINE_DEFAULT || Q._pineEditor.getValue() === _SQL_DEFAULT) {
                     Q._pineEditor.setValue(_PYTHON_DEFAULT);
-                    Q._pineEditor.refresh();
+                }
+            } else if (lang === 'sql') {
+                Q._pineEditor.setOption('mode', 'text/x-sql');
+                if (tmplWrapper) tmplWrapper.style.display = 'none';
+                if (Q._pineEditor.getValue() === _PINE_DEFAULT || Q._pineEditor.getValue() === _PYTHON_DEFAULT) {
+                    Q._pineEditor.setValue(_SQL_DEFAULT);
                 }
             } else {
                 Q._pineEditor.setOption('mode', 'javascript');
-                if (Q._pineEditor.getValue() === _PYTHON_DEFAULT) {
+                if (tmplWrapper) tmplWrapper.style.display = '';
+                if (Q._pineEditor.getValue() === _PYTHON_DEFAULT || Q._pineEditor.getValue() === _SQL_DEFAULT) {
                     Q._pineEditor.setValue(_PINE_DEFAULT);
-                    Q._pineEditor.refresh();
                 }
             }
+            Q._pineEditor.refresh();
         });
     });
 }
@@ -2422,10 +2507,8 @@ function runPineScript() {
 
     var code = Q._pineEditor.getValue();
 
-    if (_editorLang === 'python') {
-        runPythonScript(code);
-        return;
-    }
+    if (_editorLang === 'python') { runPythonScript(code); return; }
+    if (_editorLang === 'sql')    { runSQLQuery();          return; }
 
     // "caloogy" AI mode — any line containing only "caloogy" opens the AI chat panel
     var rawLines = code.split('\n');
@@ -2850,6 +2933,250 @@ function initDragResize() {
     });
 }
 
+// ── Data Manager ──────────────────────────────────────────────────────────────
+
+function initDataManager() {
+    var panel      = document.getElementById('quantDataPanel');
+    var mainCol    = document.querySelector('.qt-main-col');
+    var toggleBtn  = document.getElementById('quantDataToggle');
+    var backBtn    = document.getElementById('quantDataBack');
+    var uploadBtn  = document.getElementById('qtDataUploadBtn');
+    var csvInput   = document.getElementById('qtDataCsvInput');
+    var uploadForm = document.getElementById('qtDataUploadForm');
+    var importBtn  = document.getElementById('qtDataImportBtn');
+    var cancelBtn  = document.getElementById('qtDataCancelBtn');
+    var statusDiv  = document.getElementById('qtDataImportStatus');
+    var tableBody  = document.getElementById('qtDataTableBody');
+    var sizeEl     = document.getElementById('qtDbSize');
+    var previewWrap= document.getElementById('qtDataPreviewWrap');
+    var previewTbl = document.getElementById('qtDataPreviewTable');
+    var previewTtl = document.getElementById('qtDataPreviewTitle');
+    var exportBtn  = document.getElementById('qtDataExportBtn');
+    var sqlInput   = document.getElementById('qtDataSqlInput');
+    var sqlRun     = document.getElementById('qtDataSqlRun');
+    var sqlResult  = document.getElementById('qtDataSqlResult');
+    var syncBtn    = document.getElementById('qtDataSyncBtn');
+
+    if (!panel || !toggleBtn) return;
+
+    var _currentPreview = null;
+    var _csvContent     = null;
+
+    function fmtTs(ts) {
+        if (!ts) return '—';
+        var d = new Date(ts);
+        return d.toISOString().slice(0, 10);
+    }
+
+    function fmtRows(n) {
+        return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n);
+    }
+
+    function loadStatus() {
+        fetch('/api/db/status')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (sizeEl) sizeEl.textContent = 'DB: ' + (data.size || '—');
+            var meta = data.meta || [];
+            if (!meta.length) {
+                tableBody.innerHTML = '<tr><td colspan="7" class="qt-data-empty">No data yet. Upload a CSV or wait for monitor to sync alerts.</td></tr>';
+                return;
+            }
+            tableBody.innerHTML = meta.map(function(m) {
+                return '<tr>' +
+                  '<td>' + _esc(m.symbol) + '</td>' +
+                  '<td>' + _esc(m.interval) + '</td>' +
+                  '<td><span class="qt-data-source qt-data-source-' + m.source + '">' + _esc(m.source) + '</span></td>' +
+                  '<td>' + fmtRows(m.row_count) + '</td>' +
+                  '<td>' + fmtTs(m.first_ts) + '</td>' +
+                  '<td>' + fmtTs(m.last_ts)  + '</td>' +
+                  '<td class="qt-data-actions">' +
+                    '<button class="qt-data-act" data-act="preview" data-sym="' + _esc(m.symbol) + '" data-int="' + _esc(m.interval) + '">Preview</button>' +
+                    '<button class="qt-data-act qt-data-act-del" data-act="delete" data-sym="' + _esc(m.symbol) + '" data-int="' + _esc(m.interval) + '">&#x2715;</button>' +
+                  '</td>' +
+                '</tr>';
+            }).join('');
+        })
+        .catch(function() {});
+    }
+
+    function showPanel() {
+        panel.classList.remove('quant-hidden');
+        mainCol.classList.add('quant-hidden');
+        toggleBtn.classList.add('active');
+        loadStatus();
+    }
+
+    function hidePanel() {
+        panel.classList.add('quant-hidden');
+        mainCol.classList.remove('quant-hidden');
+        toggleBtn.classList.remove('active');
+    }
+
+    toggleBtn.addEventListener('click', function() {
+        if (panel.classList.contains('quant-hidden')) { showPanel(); }
+        else { hidePanel(); }
+    });
+
+    backBtn.addEventListener('click', hidePanel);
+
+    uploadBtn.addEventListener('click', function() { csvInput.click(); });
+
+    csvInput.addEventListener('change', function() {
+        var file = csvInput.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            _csvContent = e.target.result;
+            uploadForm.classList.remove('quant-hidden');
+            statusDiv.textContent = 'File loaded: ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+            statusDiv.className   = 'qt-data-import-status info';
+        };
+        reader.readAsText(file);
+        csvInput.value = '';
+    });
+
+    cancelBtn.addEventListener('click', function() {
+        uploadForm.classList.add('quant-hidden');
+        _csvContent = null;
+        statusDiv.textContent = '';
+    });
+
+    importBtn.addEventListener('click', function() {
+        var symbol   = document.getElementById('qtDataSymbol').value.trim().toUpperCase();
+        var interval = document.getElementById('qtDataInterval').value;
+        if (!symbol)      { statusDiv.textContent = 'Enter a symbol name.'; statusDiv.className = 'qt-data-import-status err'; return; }
+        if (!_csvContent) { statusDiv.textContent = 'No file loaded.';      statusDiv.className = 'qt-data-import-status err'; return; }
+        statusDiv.textContent = 'Importing…';
+        statusDiv.className   = 'qt-data-import-status info';
+
+        fetch('/api/db/upload-csv', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ symbol: symbol, interval: interval, csvContent: _csvContent }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) throw new Error(data.error);
+            var msg = '✓ ' + data.written + ' rows written';
+            if (data.skipped) msg += ', ' + data.skipped + ' skipped';
+            if (data.warnings && data.warnings.length) msg += ' — ⚠ ' + data.warnings.join('; ');
+            if (data.ohlcViolations) msg += ' — ' + data.ohlcViolations + ' OHLC violation(s)';
+            statusDiv.textContent = msg;
+            statusDiv.className   = 'qt-data-import-status ok';
+            _csvContent = null;
+            loadStatus();
+        })
+        .catch(function(err) {
+            statusDiv.textContent = '✗ ' + err.message;
+            statusDiv.className   = 'qt-data-import-status err';
+        });
+    });
+
+    tableBody.addEventListener('click', function(e) {
+        var btn = e.target.closest('[data-act]');
+        if (!btn) return;
+        var act = btn.getAttribute('data-act');
+        var sym = btn.getAttribute('data-sym');
+        var int = btn.getAttribute('data-int');
+
+        if (act === 'delete') {
+            if (!confirm('Delete all ' + sym + ' ' + int + ' data from the database?')) return;
+            fetch('/api/db/symbol?symbol=' + encodeURIComponent(sym) + '&interval=' + encodeURIComponent(int), { method: 'DELETE' })
+            .then(function() {
+                if (_currentPreview && _currentPreview[0] === sym && _currentPreview[1] === int) {
+                    previewWrap.classList.add('quant-hidden');
+                    _currentPreview = null;
+                }
+                loadStatus();
+            });
+        }
+
+        if (act === 'preview') {
+            _currentPreview = [sym, int];
+            previewTtl.textContent = 'Preview: ' + sym + ' / ' + int;
+            exportBtn.onclick = function() {
+                window.location = '/api/db/export?symbol=' + encodeURIComponent(sym) + '&interval=' + encodeURIComponent(int);
+            };
+            fetch('/api/db/preview?symbol=' + encodeURIComponent(sym) + '&interval=' + encodeURIComponent(int) + '&limit=20')
+            .then(function(r) { return r.json(); })
+            .then(function(rows) {
+                if (!rows.length) { previewTbl.innerHTML = '<tr><td>No rows</td></tr>'; }
+                else {
+                    var cols = Object.keys(rows[0]);
+                    previewTbl.innerHTML =
+                        '<thead><tr>' + cols.map(function(c) { return '<th>' + _esc(c) + '</th>'; }).join('') + '</tr></thead>' +
+                        '<tbody>' + rows.map(function(row) {
+                            return '<tr>' + cols.map(function(c) {
+                                var v = row[c];
+                                if (c === 'ts') v = fmtTs(v);
+                                return '<td>' + _esc(v == null ? '—' : String(v)) + '</td>';
+                            }).join('') + '</tr>';
+                        }).join('') + '</tbody>';
+                }
+                previewWrap.classList.remove('quant-hidden');
+                previewWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+        }
+    });
+
+    syncBtn.addEventListener('click', function() {
+        syncBtn.disabled = true;
+        syncBtn.textContent = 'Syncing…';
+        fetch('/api/db/status')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var meta = data.meta || [];
+            if (!meta.length) { syncBtn.disabled = false; syncBtn.textContent = '↻ Sync All'; return; }
+            var apiItems = meta.filter(function(m) { return m.source === 'api'; });
+            var promises = apiItems.map(function(m) {
+                return fetch('/api/db/sync', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ symbol: m.symbol, interval: m.interval }),
+                });
+            });
+            return Promise.all(promises);
+        })
+        .then(function() {
+            syncBtn.disabled = false;
+            syncBtn.textContent = '↻ Sync All';
+            loadStatus();
+        })
+        .catch(function() {
+            syncBtn.disabled = false;
+            syncBtn.textContent = '↻ Sync All';
+        });
+    });
+
+    sqlRun.addEventListener('click', function() {
+        var sql = sqlInput.value.trim();
+        if (!sql) return;
+        sqlResult.innerHTML = '<span class="qt-data-sql-running">Running…</span>';
+        fetch('/api/db/query', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ sql: sql }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { sqlResult.innerHTML = '<span class="qt-data-sql-err">Error: ' + _esc(data.error) + '</span>'; return; }
+            var html = '<table class="qt-sql-table"><thead><tr>';
+            (data.columns || []).forEach(function(c) { html += '<th>' + _esc(c) + '</th>'; });
+            html += '</tr></thead><tbody>';
+            (data.rows || []).forEach(function(row) {
+                html += '<tr>' + row.map(function(v) { return '<td>' + _esc(v == null ? 'NULL' : String(v)) + '</td>'; }).join('') + '</tr>';
+            });
+            html += '</tbody></table>';
+            if (data.total > (data.rows || []).length) {
+                html += '<div class="qt-sql-note">Showing ' + data.rows.length + ' of ' + data.total + ' rows</div>';
+            }
+            sqlResult.innerHTML = html;
+        })
+        .catch(function(e) { sqlResult.innerHTML = '<span class="qt-data-sql-err">Error: ' + _esc(e.message) + '</span>'; });
+    });
+}
+
 window._initQuantTab = function () {
     if (Q.inited) return;
     Q.inited = true;
@@ -2858,6 +3185,7 @@ window._initQuantTab = function () {
     quantFetch();
     sbInit();
     initPineEditor();
+    initDataManager();
     initDragResize();
     new MutationObserver(function (ms) {
         ms.forEach(function (m) {

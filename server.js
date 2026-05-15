@@ -103,10 +103,83 @@ function findFreePort(start) {
 // ── Express app ───────────────────────────────────────────────────────────────
 
 const monitor = require('./lib/monitor');
+const db      = require('./lib/db');
+
+// Copy caloogy_utils.py to ~/.caloogy/ so Python scripts can import it
+function installPythonUtils() {
+    const src  = path.join(__dirname, 'lib', 'caloogy_utils.py');
+    const dest = path.join(db.DB_DIR, 'caloogy_utils.py');
+    try {
+        require('fs').mkdirSync(db.DB_DIR, { recursive: true });
+        require('fs').copyFileSync(src, dest);
+    } catch (e) {
+        console.warn('[DB] Could not install caloogy_utils.py:', e.message);
+    }
+}
+
+// ── CSV helpers ────────────────────────────────────────────────────────────────
+
+function parseTimestamp(val) {
+    if (val == null || val === '') return null;
+    const s = String(val).trim();
+    if (/^\d{13}$/.test(s)) return parseInt(s);               // Unix ms
+    if (/^\d{10}$/.test(s)) return parseInt(s) * 1000;        // Unix seconds
+    const d = new Date(s.replace(/(\d{4})\/(\d{2})\/(\d{2})/, '$1-$2-$3'));
+    return isNaN(d) ? null : d.getTime();
+}
+
+function parseCSVText(text) {
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+        .map(l => l.trim()).filter(l => l.length);
+    if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
+
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/["']/g, ''));
+    const findCol = (...names) => names.reduce((f, n) => f >= 0 ? f : headers.indexOf(n), -1);
+
+    const dateIdx   = findCol('date','datetime','timestamp','time','ts');
+    const openIdx   = findCol('open','o');
+    const highIdx   = findCol('high','h');
+    const lowIdx    = findCol('low','l');
+    const closeIdx  = findCol('close','c','price');
+    const volumeIdx = findCol('volume','vol','v');
+
+    if (dateIdx  < 0) throw new Error('Cannot detect date column. Rename a column to date/datetime/timestamp and retry.');
+    if (closeIdx < 0) throw new Error('Cannot detect close column. Rename a column to close/price and retry.');
+
+    const candles = [], errors = [], warnings = [];
+    let skipped = 0, ohlcViolations = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+        const cells = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+        const ts    = parseTimestamp(cells[dateIdx]);
+        const close = parseFloat(cells[closeIdx]);
+        if (!ts || isNaN(close)) { skipped++; continue; }
+
+        const open   = openIdx  >= 0 ? (parseFloat(cells[openIdx])   || close) : close;
+        const high   = highIdx  >= 0 ? (parseFloat(cells[highIdx])   || close) : close;
+        const low    = lowIdx   >= 0 ? (parseFloat(cells[lowIdx])    || close) : close;
+        const volume = volumeIdx >= 0 ? (parseFloat(cells[volumeIdx]) || 0)    : 0;
+
+        if (high < low) { ohlcViolations++; errors.push(`Row ${i+1}: high(${high}) < low(${low})`); }
+        candles.push({ ts, open, high, low, close, volume });
+    }
+
+    // Sort by ts, detect out-of-order
+    let outOfOrder = 0;
+    for (let i = 1; i < candles.length; i++) {
+        if (candles[i].ts <= candles[i-1].ts) outOfOrder++;
+    }
+    if (outOfOrder > 0) {
+        warnings.push(`${outOfOrder} out-of-order timestamp(s) detected (auto-sorted)`);
+        candles.sort((a, b) => a.ts - b.ts);
+    }
+
+    return { candles, skipped, ohlcViolations, errors, warnings };
+}
 
 function startServer(cfg) {
     const app = express();
-    app.use(express.json({ limit: '2mb' }));
+    app.use(express.json({ limit: '20mb' }));  // larger limit for CSV uploads
 
     // Reject requests not originating from localhost
     app.use('/api', (req, res, next) => {
@@ -162,7 +235,9 @@ function startServer(cfg) {
         const input = JSON.stringify({ candles: candles || [] });
         let stdout = '', stderr = '';
 
-        const proc = spawn('python3', [tmpFile]);
+        const proc = spawn('python3', [tmpFile], {
+            env: { ...process.env, CALOOGY_DB_PATH: db.DB_PATH },
+        });
         const timer = setTimeout(() => {
             proc.kill();
             fs.unlink(tmpFile, () => {});
@@ -212,6 +287,86 @@ function startServer(cfg) {
         } catch (e) {
             res.status(502).json({ error: e.message });
         }
+    });
+
+    // ── Database API ──────────────────────────────────────────────────────────
+
+    app.get('/api/db/status', async (req, res) => {
+        try {
+            const meta = await db.listSyncMeta();
+            res.json({ meta, size: db.dbFileSize(), path: db.DB_PATH });
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.get('/api/db/preview', async (req, res) => {
+        const { symbol, interval } = req.query;
+        const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+        if (!symbol || !interval) return res.status(400).json({ error: 'symbol and interval required' });
+        try {
+            const rows = await db.queryCandles(symbol, interval, limit);
+            res.json(rows);
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.get('/api/db/export', async (req, res) => {
+        const { symbol, interval } = req.query;
+        if (!symbol || !interval) return res.status(400).json({ error: 'symbol and interval required' });
+        try {
+            const csv = await db.exportCSV(symbol, interval);
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="${symbol}_${interval}.csv"`);
+            res.send(csv);
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.delete('/api/db/symbol', async (req, res) => {
+        const { symbol, interval } = req.query;
+        if (!symbol || !interval) return res.status(400).json({ error: 'symbol and interval required' });
+        try {
+            await db.deleteSymbol(symbol, interval);
+            res.json({ ok: true });
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.post('/api/db/upload-csv', async (req, res) => {
+        const { symbol, interval, csvContent } = req.body || {};
+        if (!symbol || !interval || !csvContent) {
+            return res.status(400).json({ error: 'symbol, interval, and csvContent required' });
+        }
+        try {
+            const { candles, skipped, ohlcViolations, errors, warnings } = parseCSVText(csvContent);
+            if (!candles.length) {
+                return res.status(400).json({ error: 'No valid rows found in CSV.', errors });
+            }
+            const written = await db.upsertCandles(symbol.toUpperCase(), interval, candles, 'csv');
+            res.json({ ok: true, written, skipped, ohlcViolations, errors, warnings });
+        } catch (e) {
+            res.status(400).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/db/sync', async (req, res) => {
+        const { symbol, interval } = req.body || {};
+        if (!symbol || !interval) return res.status(400).json({ error: 'symbol and interval required' });
+        try {
+            const candles = await monitor.fetchCandles(symbol, interval, 300);
+            const written = await db.upsertCandles(symbol, interval, candles, 'api');
+            res.json({ ok: true, written });
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.post('/api/db/query', async (req, res) => {
+        const { sql } = req.body || {};
+        if (!sql) return res.status(400).json({ error: 'sql required' });
+        const safe = /^\s*(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN|PRAGMA|WITH)\b/i.test(sql.trim());
+        if (!safe) return res.status(400).json({
+            error: 'Read-only query interface. Use SELECT, SHOW, DESCRIBE, or EXPLAIN.'
+        });
+        try {
+            const rows    = await db.runQuery(sql);
+            const columns = rows.length ? Object.keys(rows[0]) : [];
+            res.json({ columns, rows: rows.map(r => columns.map(c => r[c])), total: rows.length });
+        } catch (e) { res.status(400).json({ error: e.message }); }
     });
 
     // ── Alerts API ────────────────────────────────────────────────────────────
@@ -278,6 +433,10 @@ function startServer(cfg) {
             setTimeout(() => process.exit(0), 1000); // force-exit fallback
         }, 200);
     });
+
+    // Initialize DB and install Python utils before starting
+    try { db.getDB(); } catch (e) { console.warn('[DB] Init warning:', e.message); }
+    installPythonUtils();
 
     let server;
     return new Promise((resolve, reject) => {
