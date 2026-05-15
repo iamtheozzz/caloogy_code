@@ -273,7 +273,8 @@ Sent by Caloogy Code running on your local machine.
 ## Features
 
 - **Live candlestick charts** — BTC, ETH, SOL, BNB and 29 more coins, powered by OKX & Binance public APIs
-- **Timeframes** — 1H, 4H, 1D, 1W
+- **Real-time Live mode** — click **● Live** to switch to a 1-second candlestick stream via WebSocket; the last forming candle also updates in real-time in all other timeframes
+- **Timeframes** — 1s (Live), 1H, 4H, 1D, 1W
 - **Built-in indicators** — SMA, EMA, Bollinger Bands, RSI, MACD (open by default)
 - **19 backtest strategies** — MA Cross, RSI Bands, BB Bounce, Supertrend, Ichimoku, Donchian, Stochastic, and more
 - **Strategy builder** — answer a few questions, get an AI-generated investment analysis in plain English

@@ -225,6 +225,75 @@ var _OKX_INST = {
 /* Binance interval fallback map */
 var _BN_INTERVAL = {'1H': '1h', '4H': '4h', '1D': '1d', '1W': '1w'};
 
+/* ── Real-time WebSocket (1s stream) ────────────────────────────────── */
+var _ws       = null;
+var _ws1sBuf  = [];   // rolling buffer used in Live mode
+
+function _wsConnect() {
+    var port = window.location.port || 80;
+    _ws = new WebSocket('ws://127.0.0.1:' + port);
+
+    _ws.onmessage = function (evt) {
+        try {
+            var msg = JSON.parse(evt.data);
+            if (msg.type !== 'kline_1s' || msg.symbol !== Q.symbol) return;
+            _onLiveCandle(msg.candle);
+        } catch {}
+    };
+
+    _ws.onclose = function () {
+        setTimeout(_wsConnect, 2000);
+    };
+}
+
+function _wsSubscribe(symbol) {
+    _ws1sBuf = [];
+    if (_ws && _ws.readyState === WebSocket.OPEN) {
+        _ws.send(JSON.stringify({ type: 'subscribe', symbol: symbol }));
+    }
+}
+
+function _onLiveCandle(candle) {
+    var dot = document.getElementById('quantLiveDot');
+    if (dot) dot.style.display = 'inline';
+
+    if (Q.bar === 'Live') {
+        // Live mode: maintain a rolling 300-candle buffer of 1s bars
+        var last = _ws1sBuf[_ws1sBuf.length - 1];
+        if (!last || last.time !== candle.time) {
+            // New second — push candle, trim buffer
+            _ws1sBuf.push(candle);
+            if (_ws1sBuf.length > 300) _ws1sBuf.shift();
+        } else {
+            // Same second — update in place (price moved within the second)
+            _ws1sBuf[_ws1sBuf.length - 1] = candle;
+        }
+        if (Q.series.candle) {
+            Q.series.candle.update({
+                time:  candle.time,
+                open:  candle.open,
+                high:  candle.high,
+                low:   candle.low,
+                close: candle.close,
+            });
+        }
+        if (Q.series.volume) {
+            Q.series.volume.update({ time: candle.time, value: candle.volume });
+        }
+    } else {
+        // Non-live mode: update the last (currently-forming) candle only
+        var lastCandle = Q.candles[Q.candles.length - 1];
+        if (!lastCandle || !Q.series.candle) return;
+        Q.series.candle.update({
+            time:  Math.floor(lastCandle.ts / 1000),
+            open:  lastCandle.open,
+            high:  Math.max(lastCandle.high, candle.close),
+            low:   Math.min(lastCandle.low,  candle.close),
+            close: candle.close,
+        });
+    }
+}
+
 function _parseOkx(data) {
     /* OKX: [ts_ms, open, high, low, close, vol, ...], newest-first */
     return data.slice().reverse().map(function (k) {
@@ -1053,7 +1122,12 @@ function quantBindUI() {
             document.querySelectorAll(_symSel).forEach(function (b) { b.classList.remove('active'); });
             btn.classList.add('active');
             Q.symbol = btn.dataset.val;
-            quantFetch();
+            _wsSubscribe(Q.symbol);
+            if (Q.bar === 'Live') {
+                _startLiveMode();
+            } else {
+                quantFetch();
+            }
         });
     });
 
@@ -1062,8 +1136,14 @@ function quantBindUI() {
         btn.addEventListener('click', function () {
             document.querySelectorAll('#quantIntervalPills .quant-pill').forEach(function (b) { b.classList.remove('active'); });
             btn.classList.add('active');
+            var prev = Q.bar;
             Q.bar = btn.dataset.val;
-            quantFetch();
+            if (Q.bar === 'Live') {
+                _startLiveMode();
+            } else {
+                if (prev === 'Live') _stopLiveMode();
+                quantFetch();
+            }
         });
     });
 
@@ -2839,12 +2919,30 @@ function initDragResize() {
     });
 }
 
+function _startLiveMode() {
+    _ws1sBuf = [];
+    // Clear chart and show empty state — candles will stream in via WebSocket
+    if (Q.series.candle) Q.series.candle.setData([]);
+    if (Q.series.volume) Q.series.volume.setData([]);
+    // Hide indicators that need history to be meaningful
+    ['sma','ema','fastEma','slowEma','bbUpper','bbMiddle','bbLower'].forEach(function (k) {
+        if (Q.series[k]) { try { Q.series[k].setData([]); } catch {} }
+    });
+    _wsSubscribe(Q.symbol);
+}
+
+function _stopLiveMode() {
+    var dot = document.getElementById('quantLiveDot');
+    if (dot) dot.style.display = 'none';
+}
+
 window._initQuantTab = function () {
     if (Q.inited) return;
     Q.inited = true;
     initCharts();
     quantBindUI();
     quantFetch();
+    _wsConnect();
     sbInit();
     initPineEditor();
     initDragResize();

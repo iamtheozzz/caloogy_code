@@ -1,8 +1,9 @@
 'use strict';
 
-const express = require('express');
-const path    = require('path');
-const net     = require('net');
+const express   = require('express');
+const path      = require('path');
+const net       = require('net');
+const WebSocket = require('ws');
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -209,10 +210,67 @@ function startServer(cfg) {
         }, 200);
     });
 
+    // ── Binance 1s WebSocket relay ────────────────────────────────────────
+    let binanceWs    = null;
+    let activeSymbol = null;
+    let wss          = null;
+
+    function subscribeBinance(symbol) {
+        if (binanceWs) { binanceWs.terminate(); binanceWs = null; }
+        activeSymbol = symbol;
+        const url = `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@kline_1s`;
+        binanceWs = new WebSocket(url);
+
+        binanceWs.on('message', raw => {
+            try {
+                const msg = JSON.parse(raw);
+                if (msg.e !== 'kline') return;
+                const k       = msg.k;
+                const payload = JSON.stringify({
+                    type:   'kline_1s',
+                    symbol,
+                    candle: {
+                        time:   Math.floor(k.t / 1000),
+                        open:   +k.o, high: +k.h, low: +k.l, close: +k.c,
+                        volume: +k.v,
+                        closed: k.x,
+                    },
+                });
+                if (wss) wss.clients.forEach(c => {
+                    if (c.readyState === WebSocket.OPEN) c.send(payload);
+                });
+            } catch {}
+        });
+
+        binanceWs.on('error', e => console.error('[WS] Binance:', e.message));
+        binanceWs.on('close', () => {
+            // Auto-reconnect if this symbol is still active
+            if (activeSymbol === symbol) setTimeout(() => subscribeBinance(symbol), 3000);
+        });
+    }
+
     let server;
     return new Promise((resolve, reject) => {
         findFreePort(3000).then(port => {
             server = app.listen(port, '127.0.0.1', () => {
+                // Attach WebSocket server to the same HTTP server
+                wss = new WebSocket.Server({ server });
+                wss.on('connection', ws => {
+                    // Tell new client which symbol is currently streaming
+                    if (activeSymbol) {
+                        ws.send(JSON.stringify({ type: 'subscribed', symbol: activeSymbol }));
+                    }
+                    ws.on('message', raw => {
+                        try {
+                            const msg = JSON.parse(raw);
+                            if (msg.type === 'subscribe' && msg.symbol) {
+                                subscribeBinance(msg.symbol);
+                            }
+                        } catch {}
+                    });
+                });
+
+                subscribeBinance('BTCUSDT');
                 monitor.startMonitor(cfg);
                 resolve(port);
             });

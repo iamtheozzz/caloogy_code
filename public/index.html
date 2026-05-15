@@ -225,6 +225,11 @@
       background: var(--bg-primary);
       color: var(--text-primary);
     }
+    .quant-pill-live { color: #ef4444; }
+    .quant-pill-live.active { background: #ef4444; color: #fff; }
+    @keyframes livePulse {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.3; }
+    }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
@@ -377,7 +382,9 @@
         <button class="quant-pill" data-val="4H">4H</button>
         <button class="quant-pill" data-val="1D">1D</button>
         <button class="quant-pill" data-val="1W">1W</button>
+        <button class="quant-pill quant-pill-live" data-val="Live" id="quantLivePill">● Live</button>
       </div>
+      <span id="quantLiveDot" style="display:none;font-size:11px;color:#ef4444;margin-left:6px;animation:livePulse 1.2s ease-in-out infinite">● LIVE</span>
       <div class="qt-sep"></div>
       <label class="qt-ind-ctrl">
         <input type="checkbox" id="quantSmaOn" checked>
