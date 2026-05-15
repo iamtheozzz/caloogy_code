@@ -2344,6 +2344,61 @@ var _PINE_TEMPLATES = {
 '       f"PC1 loadings:\\n{loadings}")',
 'print(json.dumps({"plots": plots, "markers": markers, "log": log}))',
     ].join('\n'),
+
+    // ── SQL templates ─────────────────────────────────────────────────────────
+
+    sql_overview: [
+'-- Overview: all symbols in local DB',
+'SELECT symbol, interval,',
+'       COUNT(*)               AS rows,',
+'       datetime(MIN(ts)/1000, \'unixepoch\') AS first_bar,',
+'       datetime(MAX(ts)/1000, \'unixepoch\') AS last_bar',
+'FROM candles',
+'GROUP BY symbol, interval',
+'ORDER BY symbol, interval',
+    ].join('\n'),
+
+    sql_recent: [
+'-- Recent candles for a symbol (edit symbol/interval as needed)',
+'SELECT datetime(ts/1000, \'unixepoch\') AS date,',
+'       open, high, low, close,',
+'       ROUND(volume, 2) AS volume',
+'FROM candles',
+'WHERE symbol = \'BTC\' AND interval = \'1D\'',
+'ORDER BY ts DESC',
+'LIMIT 30',
+    ].join('\n'),
+
+    sql_returns: [
+'-- Daily returns % for a symbol',
+'WITH base AS (',
+'  SELECT ts, close,',
+'         LAG(close) OVER (ORDER BY ts) AS prev_close',
+'  FROM candles',
+'  WHERE symbol = \'BTC\' AND interval = \'1D\'',
+')',
+'SELECT datetime(ts/1000, \'unixepoch\') AS date,',
+'       close,',
+'       ROUND((close - prev_close) / prev_close * 100, 4) AS ret_pct',
+'FROM base',
+'WHERE prev_close IS NOT NULL',
+'ORDER BY ts DESC',
+'LIMIT 50',
+    ].join('\n'),
+
+    sql_stats: [
+'-- Summary statistics for a symbol',
+'SELECT symbol, interval,',
+'       COUNT(*)                        AS n_bars,',
+'       ROUND(MIN(close), 4)            AS min_close,',
+'       ROUND(MAX(close), 4)            AS max_close,',
+'       ROUND(AVG(close), 4)            AS avg_close,',
+'       ROUND(AVG(volume), 2)           AS avg_volume,',
+'       ROUND(STDDEV(close), 4)         AS stddev_close',
+'FROM candles',
+'GROUP BY symbol, interval',
+'ORDER BY symbol',
+    ].join('\n'),
 };
 
 function initPineEditor() {
@@ -2435,19 +2490,15 @@ function initPineEditor() {
     document.getElementById('qtPineTemplate').addEventListener('change', function (e) {
         var key = e.target.value;
         if (key && _PINE_TEMPLATES[key]) {
-            // Auto-switch editor language when a Python (py_*) template is selected
-            var isPy = key.indexOf('py_') === 0;
-            if (isPy && _editorLang !== 'python') {
-                _editorLang = 'python';
-                Q._pineEditor.setOption('mode', 'python');
+            var isSql = key.indexOf('sql_') === 0;
+            var isPy  = key.indexOf('py_') === 0;
+            var targetLang = isSql ? 'sql' : (isPy ? 'python' : 'js');
+            var targetMode = isSql ? 'text/x-sql' : (isPy ? 'python' : 'javascript');
+            if (_editorLang !== targetLang) {
+                _editorLang = targetLang;
+                Q._pineEditor.setOption('mode', targetMode);
                 document.querySelectorAll('.qt-lang-tab').forEach(function (b) {
-                    b.classList.toggle('active', b.getAttribute('data-lang') === 'python');
-                });
-            } else if (!isPy && _editorLang !== 'js') {
-                _editorLang = 'js';
-                Q._pineEditor.setOption('mode', 'javascript');
-                document.querySelectorAll('.qt-lang-tab').forEach(function (b) {
-                    b.classList.toggle('active', b.getAttribute('data-lang') === 'js');
+                    b.classList.toggle('active', b.getAttribute('data-lang') === targetLang);
                 });
             }
             Q._pineEditor.setValue(_PINE_TEMPLATES[key]);
@@ -2457,31 +2508,29 @@ function initPineEditor() {
     });
 
     // Lang tab switching (JS / Python / SQL)
-    var langTabs    = document.querySelectorAll('.qt-lang-tab');
-    var tmplSelect  = document.getElementById('qtPineTemplate');
-    var tmplWrapper = tmplSelect ? tmplSelect.parentElement : null;
+    var langTabs   = document.querySelectorAll('.qt-lang-tab');
+    var tmplSelect = document.getElementById('qtPineTemplate');
     langTabs.forEach(function (btn) {
         btn.addEventListener('click', function () {
             var lang = btn.getAttribute('data-lang');
             if (lang === _editorLang) return;
-            var prev = _editorLang;
             _editorLang = lang;
             langTabs.forEach(function (b) { b.classList.toggle('active', b === btn); });
             if (lang === 'python') {
                 Q._pineEditor.setOption('mode', 'python');
-                if (tmplWrapper) tmplWrapper.style.display = '';
+                if (tmplSelect) tmplSelect.style.display = '';
                 if (Q._pineEditor.getValue() === _PINE_DEFAULT || Q._pineEditor.getValue() === _SQL_DEFAULT) {
                     Q._pineEditor.setValue(_PYTHON_DEFAULT);
                 }
             } else if (lang === 'sql') {
                 Q._pineEditor.setOption('mode', 'text/x-sql');
-                if (tmplWrapper) tmplWrapper.style.display = 'none';
+                if (tmplSelect) tmplSelect.style.display = '';
                 if (Q._pineEditor.getValue() === _PINE_DEFAULT || Q._pineEditor.getValue() === _PYTHON_DEFAULT) {
                     Q._pineEditor.setValue(_SQL_DEFAULT);
                 }
             } else {
                 Q._pineEditor.setOption('mode', 'javascript');
-                if (tmplWrapper) tmplWrapper.style.display = '';
+                if (tmplSelect) tmplSelect.style.display = '';
                 if (Q._pineEditor.getValue() === _PYTHON_DEFAULT || Q._pineEditor.getValue() === _SQL_DEFAULT) {
                     Q._pineEditor.setValue(_PINE_DEFAULT);
                 }
