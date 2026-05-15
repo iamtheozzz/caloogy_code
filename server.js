@@ -210,43 +210,105 @@ function startServer(cfg) {
         }, 200);
     });
 
-    // ── Binance 1s WebSocket relay ────────────────────────────────────────
-    let binanceWs    = null;
+    // ── Real-time 1s WebSocket relay (OKX primary, Binance fallback) ─────
+    const OKX_WS_INST = {
+        BTCUSDT:'BTC-USDT', ETHUSDT:'ETH-USDT', BNBUSDT:'BNB-USDT', SOLUSDT:'SOL-USDT',
+        XRPUSDT:'XRP-USDT', DOGEUSDT:'DOGE-USDT', ADAUSDT:'ADA-USDT', AVAXUSDT:'AVAX-USDT',
+        LINKUSDT:'LINK-USDT', DOTUSDT:'DOT-USDT', UNIUSDT:'UNI-USDT', LTCUSDT:'LTC-USDT',
+        ATOMUSDT:'ATOM-USDT', NEARUSDT:'NEAR-USDT', APTUSDT:'APT-USDT', ARBUSDT:'ARB-USDT',
+        OPUSDT:'OP-USDT', SUIUSDT:'SUI-USDT', TRXUSDT:'TRX-USDT', MATICUSDT:'MATIC-USDT',
+        FILUSDT:'FIL-USDT', ICPUSDT:'ICP-USDT', INJUSDT:'INJ-USDT', TONUSDT:'TON-USDT',
+        PEPEUSDT:'PEPE-USDT', SHIBUSDT:'SHIB-USDT', WIFUSDT:'WIF-USDT', JUPUSDT:'JUP-USDT',
+        BONKUSDT:'BONK-USDT', RENDERUSDT:'RENDER-USDT', FETUSDT:'FET-USDT',
+        HBARUSDT:'HBAR-USDT', VETUSDT:'VET-USDT',
+    };
+
+    let liveWs       = null;
     let activeSymbol = null;
     let wss          = null;
 
-    function subscribeBinance(symbol) {
-        if (binanceWs) { binanceWs.terminate(); binanceWs = null; }
-        activeSymbol = symbol;
-        const url = `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@kline_1s`;
-        binanceWs = new WebSocket(url);
+    function broadcast(candle, symbol) {
+        if (!wss) return;
+        const payload = JSON.stringify({ type: 'kline_1s', symbol, candle });
+        wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(payload); });
+    }
 
-        binanceWs.on('message', raw => {
+    function subscribeOKX(symbol) {
+        const instId = OKX_WS_INST[symbol];
+        if (!instId) return subscribeBindance(symbol);
+
+        const ws = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
+        liveWs = ws;
+
+        ws.on('open', () => {
+            ws.send(JSON.stringify({ op: 'subscribe', args: [{ channel: 'candle1s', instId }] }));
+            // OKX requires a ping every 25s to keep connection alive
+            ws._pingTimer = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) ws.send('ping');
+            }, 25000);
+        });
+
+        ws.on('message', raw => {
+            const txt = raw.toString();
+            if (txt === 'pong') return;
             try {
-                const msg = JSON.parse(raw);
-                if (msg.e !== 'kline') return;
-                const k       = msg.k;
-                const payload = JSON.stringify({
-                    type:   'kline_1s',
-                    symbol,
-                    candle: {
-                        time:   Math.floor(k.t / 1000),
-                        open:   +k.o, high: +k.h, low: +k.l, close: +k.c,
-                        volume: +k.v,
-                        closed: k.x,
-                    },
-                });
-                if (wss) wss.clients.forEach(c => {
-                    if (c.readyState === WebSocket.OPEN) c.send(payload);
-                });
+                const msg = JSON.parse(txt);
+                if (!msg.data || !Array.isArray(msg.data)) return;
+                const d = msg.data[0];
+                // OKX candle1s: [ts_ms, open, high, low, close, vol, volCcy, volCcyQuote, confirm]
+                broadcast({
+                    time:   Math.floor(+d[0] / 1000),
+                    open:   +d[1], high: +d[2], low: +d[3], close: +d[4],
+                    volume: +d[5],
+                    closed: d[8] === '1',
+                }, symbol);
             } catch {}
         });
 
-        binanceWs.on('error', e => console.error('[WS] Binance:', e.message));
-        binanceWs.on('close', () => {
-            // Auto-reconnect if this symbol is still active
-            if (activeSymbol === symbol) setTimeout(() => subscribeBinance(symbol), 3000);
+        ws.on('error', () => {
+            console.log('[WS] OKX failed, trying Binance…');
+            clearInterval(ws._pingTimer);
+            subscribeBindance(symbol);
         });
+
+        ws.on('close', () => {
+            clearInterval(ws._pingTimer);
+            if (activeSymbol === symbol && liveWs === ws) {
+                setTimeout(() => subscribeOKX(symbol), 3000);
+            }
+        });
+    }
+
+    function subscribeBindance(symbol) {
+        const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@kline_1s`);
+        liveWs = ws;
+
+        ws.on('message', raw => {
+            try {
+                const msg = JSON.parse(raw);
+                if (msg.e !== 'kline') return;
+                const k = msg.k;
+                broadcast({
+                    time:   Math.floor(k.t / 1000),
+                    open:   +k.o, high: +k.h, low: +k.l, close: +k.c,
+                    volume: +k.v,
+                    closed: k.x,
+                }, symbol);
+            } catch {}
+        });
+
+        ws.on('error', e => console.error('[WS] Binance:', e.message));
+        ws.on('close', () => {
+            if (activeSymbol === symbol && liveWs === ws) {
+                setTimeout(() => subscribeOKX(symbol), 3000);
+            }
+        });
+    }
+
+    function subscribe(symbol) {
+        if (liveWs) { liveWs.terminate(); liveWs = null; }
+        activeSymbol = symbol;
+        subscribeOKX(symbol);
     }
 
     let server;
@@ -264,13 +326,13 @@ function startServer(cfg) {
                         try {
                             const msg = JSON.parse(raw);
                             if (msg.type === 'subscribe' && msg.symbol) {
-                                subscribeBinance(msg.symbol);
+                                subscribe(msg.symbol);
                             }
                         } catch {}
                     });
                 });
 
-                subscribeBinance('BTCUSDT');
+                subscribe('BTCUSDT');
                 monitor.startMonitor(cfg);
                 resolve(port);
             });
