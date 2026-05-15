@@ -294,9 +294,39 @@ function _setLiveChartType(type) {
     if (_ws1sBuf.length > 0) _liveSeriesSetData(_ws1sBuf);
 }
 
+var _restPollTimer = null;
+
+function _stopRestPoll() {
+    if (_restPollTimer) { clearInterval(_restPollTimer); _restPollTimer = null; }
+}
+
+function _startRestPoll(symbol) {
+    _stopRestPoll();
+    var instId = _OKX_INST[symbol];
+    if (!instId) return;
+    function poll() {
+        if (_wsSymbol !== symbol || Q.bar !== 'Live') { _stopRestPoll(); return; }
+        fetch('https://www.okx.com/api/v5/market/candles?instId=' + instId + '&bar=1s&limit=1')
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (j.code !== '0' || !j.data || !j.data[0]) return;
+                var d = j.data[0];
+                _onLiveCandle({
+                    time: Math.floor(+d[0] / 1000),
+                    open: +d[1], high: +d[2], low: +d[3], close: +d[4],
+                    volume: +d[5], closed: d[8] === '1',
+                });
+            })
+            .catch(function () {});
+    }
+    poll();
+    _restPollTimer = setInterval(poll, 1000);
+}
+
 function _wsSubscribe(symbol) {
     _ws1sBuf  = [];
     _wsSymbol = symbol;
+    _stopRestPoll();
     if (_ws) { _ws.close(); _ws = null; }
     _wsConnectOKX(symbol);
 }
@@ -308,8 +338,10 @@ function _wsConnectOKX(symbol) {
     var ws = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
     _ws = ws;
     var pingTimer;
+    var connected = false;
 
     ws.onopen = function () {
+        connected = true;
         ws.send(JSON.stringify({ op: 'subscribe', args: [{ channel: 'candle1s', instId: instId }] }));
         pingTimer = setInterval(function () {
             if (ws.readyState === WebSocket.OPEN) ws.send('ping');
@@ -332,21 +364,26 @@ function _wsConnectOKX(symbol) {
 
     ws.onerror = function () {
         clearInterval(pingTimer);
-        _wsConnectBinance(symbol);
+        if (!connected) _wsConnectBinance(symbol);
     };
 
     ws.onclose = function () {
         clearInterval(pingTimer);
-        if (_wsSymbol === symbol && Q.bar === 'Live') {
+        if (_wsSymbol !== symbol || Q.bar !== 'Live') return;
+        if (connected) {
             setTimeout(function () { _wsConnectOKX(symbol); }, 3000);
+        } else {
+            _wsConnectBinance(symbol);
         }
     };
 }
 
 function _wsConnectBinance(symbol) {
-    var url = 'wss://stream.binance.com:9443/ws/' + symbol.toLowerCase() + '@kline_1s';
-    var ws  = new WebSocket(url);
+    var ws  = new WebSocket('wss://stream.binance.com:9443/ws/' + symbol.toLowerCase() + '@kline_1s');
     _ws = ws;
+    var connected = false;
+
+    ws.onopen = function () { connected = true; };
 
     ws.onmessage = function (evt) {
         try {
@@ -361,16 +398,23 @@ function _wsConnectBinance(symbol) {
         } catch {}
     };
 
-    ws.onerror = function () { console.warn('[WS] Binance also failed'); };
+    ws.onerror = function () {
+        if (!connected) _startRestPoll(symbol);  // both WS failed → REST fallback
+    };
 
     ws.onclose = function () {
-        if (_wsSymbol === symbol && Q.bar === 'Live') {
+        if (_wsSymbol !== symbol || Q.bar !== 'Live') return;
+        if (connected) {
             setTimeout(function () { _wsConnectOKX(symbol); }, 3000);
+        } else {
+            _startRestPoll(symbol);
         }
     };
 }
 
 function _onLiveCandle(candle) {
+    var dot = document.getElementById('quantLiveDot');
+    if (dot) dot.style.display = 'inline';
 
     if (Q.bar === 'Live') {
         // Maintain rolling 300-candle buffer
@@ -3035,9 +3079,6 @@ function _startLiveMode() {
     _ws1sBuf = [];
     // Wipe any existing live series immediately to prevent stale data on symbol switch
     if (_liveSeries) { try { _liveSeries.setData([]); } catch {} }
-    // Show LIVE dot immediately on click
-    var dot = document.getElementById('quantLiveDot');
-    if (dot) dot.style.display = 'inline';
     // Hide SMA / EMA / BB indicator controls
     document.querySelectorAll('.qt-ind-ctrl').forEach(function (el) {
         el.style.display = 'none';
@@ -3117,6 +3158,8 @@ function _startLiveMode() {
 }
 
 function _stopLiveMode() {
+    _stopRestPoll();
+    if (_ws) { _ws.close(); _ws = null; }
     var dot = document.getElementById('quantLiveDot');
     if (dot) dot.style.display = 'none';
     var tp = document.getElementById('quantLiveTypePills');
