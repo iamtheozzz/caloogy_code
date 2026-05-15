@@ -697,12 +697,19 @@
             <option value="macd_rsi">MACD × RSI [JS]</option>
             <option value="zscore">Z-Score Reversion [JS]</option>
           </optgroup>
-          <optgroup label="── Python ──">
+          <optgroup label="── Python: Indicators ──">
             <option value="py_ema_cross">🐍 EMA Cross</option>
             <option value="py_rsi_signal">🐍 RSI Signal</option>
             <option value="py_bb_bands">🐍 Bollinger Bands</option>
             <option value="py_macd_rsi">🐍 MACD × RSI</option>
             <option value="py_zscore">🐍 Z-Score Reversion</option>
+          </optgroup>
+          <optgroup label="── Python: ML / Stats ──">
+            <option value="py_ml_rf">🐍 Random Forest Signal</option>
+            <option value="py_adf_test">🐍 ADF Stationarity Test</option>
+            <option value="py_arima">🐍 ARIMA Forecast</option>
+            <option value="py_scipy_opt">🐍 EMA Optimization (scipy)</option>
+            <option value="py_pca">🐍 PCA Factor Model</option>
           </optgroup>
         </select>
         <button id="qtPineRun" class="qt-pine-run">&#9654; Run</button>
@@ -714,6 +721,7 @@
         <div id="qtPineEditor"></div>
       </div>
       <div id="qtPineStatus" class="qt-pine-status"></div>
+      <pre id="qtPineResults" class="qt-pine-results quant-hidden"></pre>
     </div>
   </div>
   </div><!-- /.qt-main-col -->

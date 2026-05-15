@@ -721,6 +721,24 @@ body.nav-quant .quant-section {
     50%       { opacity: 0.4; }
 }
 
+.qt-pine-results {
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.75rem;
+    line-height: 1.65;
+    padding: 10px 14px;
+    margin: 0;
+    color: var(--text-secondary);
+    background: rgba(128,128,128,0.04);
+    border-top: 1px solid var(--border-color);
+    overflow-x: auto;
+    white-space: pre;
+    max-height: 180px;
+    overflow-y: auto;
+}
+.qt-pine-wrap.qt-pine-docked .qt-pine-results {
+    max-height: 220px;
+}
+
 /* ── Quant body: main col + AI sidebar ───────────────────────────────── */
 .qt-quant-body {
     flex: 1;
