@@ -295,30 +295,54 @@ function _setLiveChartType(type) {
 }
 
 var _restPollTimer = null;
+var _restPollCandle = null;  // current 1s candle being built from ticker ticks
 
 function _stopRestPoll() {
     if (_restPollTimer) { clearInterval(_restPollTimer); _restPollTimer = null; }
+    _restPollCandle = null;
 }
 
 function _startRestPoll(symbol) {
     _stopRestPoll();
     var instId = _OKX_INST[symbol];
-    if (!instId) return;
+
+    function applyTick(price) {
+        if (!price || isNaN(price)) return;
+        var now = Math.floor(Date.now() / 1000);
+        if (!_restPollCandle || _restPollCandle.time !== now) {
+            _restPollCandle = { time: now, open: price, high: price, low: price, close: price, volume: 0 };
+        } else {
+            _restPollCandle.high  = Math.max(_restPollCandle.high, price);
+            _restPollCandle.low   = Math.min(_restPollCandle.low,  price);
+            _restPollCandle.close = price;
+        }
+        _onLiveCandle(_restPollCandle);
+    }
+
     function poll() {
         if (_wsSymbol !== symbol || Q.bar !== 'Live') { _stopRestPoll(); return; }
-        fetch('https://www.okx.com/api/v5/market/candles?instId=' + instId + '&bar=1s&limit=1')
+        // OKX ticker (always available, no bar=1s dependency)
+        var url = instId
+            ? 'https://www.okx.com/api/v5/market/ticker?instId=' + instId
+            : 'https://api.binance.com/api/v3/ticker/price?symbol=' + symbol;
+        fetch(url)
             .then(function (r) { return r.json(); })
             .then(function (j) {
-                if (j.code !== '0' || !j.data || !j.data[0]) return;
-                var d = j.data[0];
-                _onLiveCandle({
-                    time: Math.floor(+d[0] / 1000),
-                    open: +d[1], high: +d[2], low: +d[3], close: +d[4],
-                    volume: +d[5], closed: d[8] === '1',
-                });
+                if (instId) {
+                    if (j.code === '0' && j.data && j.data[0]) applyTick(+j.data[0].last);
+                } else {
+                    if (j.price) applyTick(+j.price);
+                }
             })
-            .catch(function () {});
+            .catch(function () {
+                // OKX failed, try Binance price endpoint
+                fetch('https://api.binance.com/api/v3/ticker/price?symbol=' + symbol)
+                    .then(function (r) { return r.json(); })
+                    .then(function (j) { if (j.price) applyTick(+j.price); })
+                    .catch(function () {});
+            });
     }
+
     poll();
     _restPollTimer = setInterval(poll, 1000);
 }
