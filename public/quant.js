@@ -225,32 +225,85 @@ var _OKX_INST = {
 /* Binance interval fallback map */
 var _BN_INTERVAL = {'1H': '1h', '4H': '4h', '1D': '1d', '1W': '1w'};
 
-/* ── Real-time WebSocket (1s stream) ────────────────────────────────── */
-var _ws       = null;
-var _ws1sBuf  = [];   // rolling buffer used in Live mode
+/* ── Real-time WebSocket (browser → OKX primary, Binance fallback) ── */
+var _ws      = null;
+var _ws1sBuf = [];
+var _wsSymbol = null;
 
-function _wsConnect() {
-    var port = window.location.port || 80;
-    _ws = new WebSocket('ws://127.0.0.1:' + port);
+function _wsSubscribe(symbol) {
+    _ws1sBuf  = [];
+    _wsSymbol = symbol;
+    if (_ws) { _ws.close(); _ws = null; }
+    _wsConnectOKX(symbol);
+}
 
-    _ws.onmessage = function (evt) {
+function _wsConnectOKX(symbol) {
+    var instId = _OKX_INST[symbol];
+    if (!instId) { _wsConnectBinance(symbol); return; }
+
+    var ws = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
+    _ws = ws;
+    var pingTimer;
+
+    ws.onopen = function () {
+        ws.send(JSON.stringify({ op: 'subscribe', args: [{ channel: 'candle1s', instId: instId }] }));
+        pingTimer = setInterval(function () {
+            if (ws.readyState === WebSocket.OPEN) ws.send('ping');
+        }, 25000);
+    };
+
+    ws.onmessage = function (evt) {
+        if (evt.data === 'pong') return;
         try {
             var msg = JSON.parse(evt.data);
-            if (msg.type !== 'kline_1s' || msg.symbol !== Q.symbol) return;
-            _onLiveCandle(msg.candle);
+            if (!msg.data || !Array.isArray(msg.data)) return;
+            var d = msg.data[0];
+            _onLiveCandle({
+                time:   Math.floor(+d[0] / 1000),
+                open:   +d[1], high: +d[2], low: +d[3], close: +d[4],
+                volume: +d[5], closed: d[8] === '1',
+            });
         } catch {}
     };
 
-    _ws.onclose = function () {
-        setTimeout(_wsConnect, 2000);
+    ws.onerror = function () {
+        clearInterval(pingTimer);
+        _wsConnectBinance(symbol);
+    };
+
+    ws.onclose = function () {
+        clearInterval(pingTimer);
+        if (_wsSymbol === symbol && Q.bar === 'Live') {
+            setTimeout(function () { _wsConnectOKX(symbol); }, 3000);
+        }
     };
 }
 
-function _wsSubscribe(symbol) {
-    _ws1sBuf = [];
-    if (_ws && _ws.readyState === WebSocket.OPEN) {
-        _ws.send(JSON.stringify({ type: 'subscribe', symbol: symbol }));
-    }
+function _wsConnectBinance(symbol) {
+    var url = 'wss://stream.binance.com:9443/ws/' + symbol.toLowerCase() + '@kline_1s';
+    var ws  = new WebSocket(url);
+    _ws = ws;
+
+    ws.onmessage = function (evt) {
+        try {
+            var msg = JSON.parse(evt.data);
+            if (msg.e !== 'kline') return;
+            var k = msg.k;
+            _onLiveCandle({
+                time:   Math.floor(k.t / 1000),
+                open:   +k.o, high: +k.h, low: +k.l, close: +k.c,
+                volume: +k.v, closed: k.x,
+            });
+        } catch {}
+    };
+
+    ws.onerror = function () { console.warn('[WS] Binance also failed'); };
+
+    ws.onclose = function () {
+        if (_wsSymbol === symbol && Q.bar === 'Live') {
+            setTimeout(function () { _wsConnectOKX(symbol); }, 3000);
+        }
+    };
 }
 
 function _onLiveCandle(candle) {
@@ -2942,7 +2995,6 @@ window._initQuantTab = function () {
     initCharts();
     quantBindUI();
     quantFetch();
-    _wsConnect();
     sbInit();
     initPineEditor();
     initDragResize();
