@@ -298,6 +298,8 @@ function _wsSubscribe(symbol) {
     _ws1sBuf  = [];
     _wsSymbol = symbol;
     if (_ws) { _ws.close(); _ws = null; }
+    // Immediately wipe stale live series data so old coin data doesn't linger
+    if (_liveSeries) { try { _liveSeries.setData([]); } catch {} }
     _wsConnectOKX(symbol);
 }
 
@@ -1234,10 +1236,10 @@ function quantBindUI() {
             document.querySelectorAll(_symSel).forEach(function (b) { b.classList.remove('active'); });
             btn.classList.add('active');
             Q.symbol = btn.dataset.val;
-            _wsSubscribe(Q.symbol);
             if (Q.bar === 'Live') {
                 _startLiveMode();
             } else {
+                _wsSubscribe(Q.symbol);
                 quantFetch();
             }
         });
@@ -3036,6 +3038,20 @@ function _startLiveMode() {
     // Show LIVE dot immediately on click
     var dot = document.getElementById('quantLiveDot');
     if (dot) dot.style.display = 'inline';
+    // Close and disable RSI / MACD panels
+    ['quantRsiDiv', 'quantMacdDiv'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el && !el.classList.contains('quant-hidden')) el.classList.add('quant-hidden');
+    });
+    document.getElementById('quantMain').classList.remove('quant-dual');
+    ['quantRsiToggle', 'quantMacdToggle'].forEach(function (id) {
+        var btn = document.getElementById(id);
+        if (!btn) return;
+        btn.classList.remove('active');
+        btn.disabled = true;
+        btn.style.opacity = '0.35';
+        btn.title = 'Not available in Live mode';
+    });
     // Hide the regular candle series and indicators — Live uses its own series
     if (Q.series.candle) Q.series.candle.setData([]);
     if (Q.series.volume) Q.series.volume.setData([]);
@@ -3101,6 +3117,14 @@ function _stopLiveMode() {
     if (dot) dot.style.display = 'none';
     var tp = document.getElementById('quantLiveTypePills');
     if (tp) tp.style.display = 'none';
+    // Re-enable RSI / MACD buttons
+    ['quantRsiToggle', 'quantMacdToggle'].forEach(function (id) {
+        var btn = document.getElementById(id);
+        if (!btn) return;
+        btn.disabled = false;
+        btn.style.opacity = '';
+        btn.title = '';
+    });
     // Remove the live series — regular Q.series.candle will be restored by quantFetch
     if (_liveSeries) {
         try { Q.charts.candle.removeSeries(_liveSeries); } catch {}
