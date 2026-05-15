@@ -371,8 +371,6 @@ function _wsConnectBinance(symbol) {
 }
 
 function _onLiveCandle(candle) {
-    var dot = document.getElementById('quantLiveDot');
-    if (dot) dot.style.display = 'inline';
 
     if (Q.bar === 'Live') {
         // Maintain rolling 300-candle buffer
@@ -3035,6 +3033,9 @@ function initDragResize() {
 
 function _startLiveMode() {
     _ws1sBuf = [];
+    // Show LIVE dot immediately on click
+    var dot = document.getElementById('quantLiveDot');
+    if (dot) dot.style.display = 'inline';
     // Hide the regular candle series and indicators — Live uses its own series
     if (Q.series.candle) Q.series.candle.setData([]);
     if (Q.series.volume) Q.series.volume.setData([]);
