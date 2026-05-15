@@ -3123,9 +3123,36 @@ function initPineEditor() {
         btn.classList.toggle('docked', docked);
         btn.title = docked ? 'Move editor back to bottom' : 'Move editor to right panel';
         if (docked) {
+            // Insert drag resizer then the editor panel
+            var resizer = document.createElement('div');
+            resizer.className = 'qt-pine-resizer';
+            resizer.id = 'qtPineResizer';
+            body.appendChild(resizer);
             body.appendChild(wrap);
+
+            resizer.addEventListener('mousedown', function (e) {
+                e.preventDefault();
+                resizer.classList.add('dragging');
+                var startX = e.clientX;
+                var startW = wrap.getBoundingClientRect().width;
+                function onMove(e) {
+                    var newW = Math.max(280, Math.min(900, startW + (startX - e.clientX)));
+                    wrap.style.width = newW + 'px';
+                }
+                function onUp() {
+                    resizer.classList.remove('dragging');
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                    if (Q._pineEditor) Q._pineEditor.refresh();
+                }
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+            });
         } else {
+            var resizer = document.getElementById('qtPineResizer');
+            if (resizer) resizer.remove();
             mainCol.appendChild(wrap);
+            wrap.style.width = '';
         }
         if (Q._pineEditor) Q._pineEditor.refresh();
     });
