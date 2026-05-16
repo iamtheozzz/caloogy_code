@@ -1207,6 +1207,29 @@ body.nav-quant .quant-section {
 .qt-data-sql-running { color: var(--text-secondary); }
 .qt-data-sql-err     { color: #ef4444; }
 
+/* ── Panel drag handles (chart↔editor vertical, main↔AI horizontal) ── */
+.qt-vpanel-drag {
+    height: 5px;
+    cursor: ns-resize;
+    flex-shrink: 0;
+    background: transparent;
+    transition: background 0.15s;
+}
+.qt-vpanel-drag:hover, .qt-vpanel-drag.dragging {
+    background: rgba(99,102,241,0.18);
+}
+
+.qt-ai-resizer {
+    width: 5px;
+    cursor: col-resize;
+    flex-shrink: 0;
+    background: transparent;
+    transition: background 0.15s;
+}
+.qt-ai-resizer:hover, .qt-ai-resizer.dragging {
+    background: rgba(99,102,241,0.18);
+}
+
 /* ── SQL result table (shared by editor results panel and Data Manager) ── */
 
 .qt-sql-table {

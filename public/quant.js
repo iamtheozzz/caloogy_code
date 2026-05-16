@@ -2688,6 +2688,8 @@ function enterAIMode(initialMsg) {
     if (!chatEl) return;
 
     chatEl.style.display   = 'flex';
+    var _aiResizer = document.getElementById('qtAiResizer');
+    if (_aiResizer) _aiResizer.style.display = 'block';
     _aiHistory = [];
     var msgsEl = document.getElementById('qtAiMsgs');
     msgsEl.innerHTML = '';
@@ -2723,6 +2725,8 @@ function enterAIMode(initialMsg) {
 function exitAIMode() {
     var chatEl = document.getElementById('qtAiChat');
     if (chatEl) chatEl.style.display = 'none';
+    var _aiResizer = document.getElementById('qtAiResizer');
+    if (_aiResizer) _aiResizer.style.display = 'none';
     var status = document.getElementById('qtPineStatus');
     status.textContent = ''; status.className = 'qt-pine-status';
     var btn = document.getElementById('quantAiToggle');
@@ -2930,13 +2934,27 @@ function _doSendAIRequest(text, status, sendBtn) {
 /* ── Public entry ───────────────────────────────────────────────────── */
 /* ── Drag-resize for chart panels ───────────────────────────────────── */
 function initDragResize() {
-    var quantMain = document.getElementById('quantMain');
-    var rsiDiv    = document.getElementById('quantRsiDiv');
-    var macdDiv   = document.getElementById('quantMacdDiv');
-    var vDrag     = document.getElementById('qtVDrag');
-    var hDrag     = document.getElementById('qtHDrag');
-    var subColW   = 280; // tracks current right-panel width in dual mode
-    var drag      = { active: false };
+    var quantMain  = document.getElementById('quantMain');
+    var rsiDiv     = document.getElementById('quantRsiDiv');
+    var macdDiv    = document.getElementById('quantMacdDiv');
+    var vDrag      = document.getElementById('qtVDrag');
+    var hDrag      = document.getElementById('qtHDrag');
+    var vPanelDrag = document.getElementById('qtVPanelDrag');
+    var aiResizer  = document.getElementById('qtAiResizer');
+    var aiChat     = document.getElementById('qtAiChat');
+    var subColW    = 280; // tracks current right-panel width in dual mode
+    var drag       = { active: false };
+
+    // Restore persisted panel sizes
+    var savedChartH = parseInt(localStorage.getItem('cc-chart-h') || '0', 10);
+    if (savedChartH >= 150) {
+        quantMain.style.flex   = 'none';
+        quantMain.style.height = savedChartH + 'px';
+    }
+    var savedAiW = parseInt(localStorage.getItem('cc-ai-w') || '0', 10);
+    if (savedAiW >= 200) {
+        aiChat.style.width = savedAiW + 'px';
+    }
 
     // Single-mode: drag the top edge of a sub-chart to resize it
     [rsiDiv, macdDiv].forEach(function (chartDiv) {
@@ -2964,6 +2982,22 @@ function initDragResize() {
                  startY: e.clientY, startH: rsiDiv.offsetHeight };
     });
 
+    // Panel drag: resize chart area vs lower panels (vertical)
+    vPanelDrag.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        vPanelDrag.classList.add('dragging');
+        drag = { active: true, type: 'panel-v',
+                 startY: e.clientY, startH: quantMain.offsetHeight };
+    });
+
+    // AI chat drag: resize main column vs AI sidebar (horizontal)
+    aiResizer.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        aiResizer.classList.add('dragging');
+        drag = { active: true, type: 'ai-h',
+                 startX: e.clientX, startW: aiChat.offsetWidth };
+    });
+
     document.addEventListener('mousemove', function (e) {
         if (!drag.active) return;
         if (drag.type === 'sub-h') {
@@ -2981,11 +3015,27 @@ function initDragResize() {
             drag.el.style.flex      = 'none';
             drag.el.style.height    = h + 'px';
             drag.el.style.maxHeight = h + 'px';
+        } else if (drag.type === 'panel-v') {
+            // Drag down → chart grows; drag up → chart shrinks
+            var newH = Math.max(150, drag.startH + (e.clientY - drag.startY));
+            quantMain.style.flex   = 'none';
+            quantMain.style.height = newH + 'px';
+        } else if (drag.type === 'ai-h') {
+            // Drag left → AI widens; drag right → AI narrows
+            var newW = Math.max(200, Math.min(700, drag.startW - (e.clientX - drag.startX)));
+            aiChat.style.width = newW + 'px';
         }
     });
 
     document.addEventListener('mouseup', function () {
         if (!drag.active) return;
+        if (drag.type === 'panel-v') {
+            vPanelDrag.classList.remove('dragging');
+            localStorage.setItem('cc-chart-h', quantMain.offsetHeight);
+        } else if (drag.type === 'ai-h') {
+            aiResizer.classList.remove('dragging');
+            localStorage.setItem('cc-ai-w', aiChat.offsetWidth);
+        }
         drag.active = false;
         vDrag.classList.remove('dragging');
         hDrag.classList.remove('dragging');
