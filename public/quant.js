@@ -2485,7 +2485,10 @@ function initPineEditor() {
             mainCol.appendChild(wrap);
             wrap.style.width = '';
         }
-        if (Q._pineEditor) Q._pineEditor.refresh();
+        // Wait for layout reflow before refreshing so CodeMirror reads the correct size
+        requestAnimationFrame(function () {
+            if (Q._pineEditor) Q._pineEditor.refresh();
+        });
     });
     document.getElementById('qtPineTemplate').addEventListener('change', function (e) {
         var key = e.target.value;
@@ -2503,6 +2506,13 @@ function initPineEditor() {
             }
             Q._pineEditor.setValue(_PINE_TEMPLATES[key]);
             Q._pineEditor.refresh();
+            // For Python templates the strategy code is after the _PY_H header;
+            // scroll to the last line so users see the unique part immediately.
+            if (isPy) {
+                var last = Q._pineEditor.lastLine();
+                Q._pineEditor.setCursor(last, 0);
+                Q._pineEditor.scrollIntoView({ line: last, ch: 0 }, 50);
+            }
         }
         e.target.value = '';
     });
