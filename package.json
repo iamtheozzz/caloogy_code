@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "node scripts/postinstall.js",
-    "postinstall": "cd \"${npm_config_prefix:-/usr/local}/lib/node_modules/caloogy-code\" && node scripts/postinstall.js"
+    "postinstall": "cd /tmp && PKG=$(dirname \"$npm_package_json\") && node \"$PKG/scripts/postinstall.js\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
