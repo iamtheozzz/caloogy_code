@@ -1360,23 +1360,59 @@ function quantBindUI() {
     bindExpand('quantMoreIndBtn',     'quantMoreIndPanel');
     bindExpand('quantMoreStratsBtn',  'quantMoreStratsPanel');
 
-    // Run backtest
+    // Run backtest (server-side C++ engine)
     var runBtn = document.getElementById('quantRunBacktest');
     if (runBtn) runBtn.addEventListener('click', function () {
         if (Q.candles.length < 30) return;
         runBtn.disabled = true;
         runBtn.textContent = 'Running…';
-        var bt = runBacktest(Q.candles, Q.activeStrat);
-        quantRenderAll(bt);
-        var sign = bt.totalReturn >= 0 ? '+' : '';
-        document.getElementById('btReturn').textContent  = sign + bt.totalReturn.toFixed(1) + '%';
-        document.getElementById('btTrades').textContent  = bt.tradeCount;
-        document.getElementById('btWinRate').textContent = bt.winRate.toFixed(1) + '%';
-        document.getElementById('btMaxDD').textContent   = bt.maxDD.toFixed(1) + '%';
-        document.getElementById('btReturn').style.color  = bt.totalReturn >= 0 ? '#0d9488' : '#ef4444';
-        document.getElementById('quantResults').classList.remove('quant-hidden');
-        runBtn.disabled = false;
-        runBtn.textContent = 'Run Backtest';
+
+        function _iv(id) { var e = document.getElementById(id); return e ? parseInt(e.value) : 0; }
+        var stratParams = {
+            ma_cross:   { fast: _iv('quantFastMa'),      slow: _iv('quantSlowMa') },
+            rsi_bands:  { ob: _iv('quantRsiOb'),         os: _iv('quantRsiOs') },
+            bb_bounce:  { period: _iv('quantBbStratPeriod') },
+            macd:       { fast: _iv('quantMacdFast'),    slow: _iv('quantMacdSlow'), sig: _iv('quantMacdSig') },
+            donchian:   { period: _iv('quantDonchianPeriod') },
+            mean_rev:   { period: _iv('quantMrPeriod'),  dev: _iv('quantMrDev') / 100 },
+            stoch:      { k: _iv('quantStochK'),         d: _iv('quantStochD'), ob: _iv('quantStochOb'), os: _iv('quantStochOs') },
+            supertrend: { period: _iv('quantStPeriod'),  mult: _iv('quantStMult') },
+            cci:        { period: _iv('quantCciPeriod'), thresh: _iv('quantCciThresh') },
+            roc:        { period: _iv('quantRocPeriod') },
+            ichimoku:   { tenkan: _iv('quantIchiTenkan'), kijun: _iv('quantIchiKijun') },
+            psar:       { step: _iv('quantSarStep') * 0.01, maxStep: _iv('quantSarMax') * 0.01 },
+            williams_r: { period: _iv('quantWrPeriod'),  ob: -_iv('quantWrOb'), os: -_iv('quantWrOs') },
+            adx:        { period: _iv('quantAdxPeriod'), thresh: _iv('quantAdxThresh') },
+            keltner:    { period: _iv('quantKcPeriod'),  mult: _iv('quantKcMult') },
+            trix:       { period: _iv('quantTrixPeriod') },
+            cmo:        { period: _iv('quantCmoPeriod'), thresh: _iv('quantCmoThresh') },
+            hull:       { fast: _iv('quantHullFast'),    slow: _iv('quantHullSlow') },
+            vwap:       { period: _iv('quantVwapPeriod'), thresh: _iv('quantVwapThresh') / 100 },
+            obv:        { period: _iv('quantObvPeriod') },
+        }[Q.activeStrat] || {};
+
+        fetch('/api/backtest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ candles: Q.candles, strategy: Q.activeStrat, params: stratParams }),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (bt) {
+            if (bt.error) { console.error('[Backtest]', bt.error); return; }
+            quantRenderAll(bt);
+            var sign = bt.totalReturn >= 0 ? '+' : '';
+            document.getElementById('btReturn').textContent  = sign + bt.totalReturn.toFixed(1) + '%';
+            document.getElementById('btTrades').textContent  = bt.tradeCount;
+            document.getElementById('btWinRate').textContent = bt.winRate.toFixed(1) + '%';
+            document.getElementById('btMaxDD').textContent   = bt.maxDD.toFixed(1) + '%';
+            document.getElementById('btReturn').style.color  = bt.totalReturn >= 0 ? '#0d9488' : '#ef4444';
+            document.getElementById('quantResults').classList.remove('quant-hidden');
+        })
+        .catch(function (e) { console.error('[Backtest] fetch failed:', e); })
+        .finally(function () {
+            runBtn.disabled = false;
+            runBtn.textContent = 'Run Backtest';
+        });
     });
 
     // Sub-chart toggle (RSI / MACD)

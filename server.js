@@ -4,6 +4,350 @@ const express = require('express');
 const path    = require('path');
 const net     = require('net');
 
+// ── C++ native addons (optional — graceful JS fallback if not built) ──────────
+let _ind = null, _csv = null;
+try { _ind = require('./build/Release/caloogy_indicators.node'); } catch {}
+try { _csv = require('./build/Release/caloogy_csv.node');        } catch {}
+
+// ── Server-side backtest engine (uses C++ indicators when available) ──────────
+
+function _indSma(arr, n) {
+    if (_ind) return _ind.sma(arr, n);
+    const out = new Array(arr.length).fill(null);
+    for (let i = n - 1; i < arr.length; i++) {
+        let s = 0; for (let j = 0; j < n; j++) s += arr[i - j]; out[i] = s / n;
+    }
+    return out;
+}
+function _indEma(arr, n) {
+    if (_ind) return _ind.ema(arr, n);
+    const k = 2 / (n + 1), out = new Array(arr.length).fill(null);
+    let prev = null;
+    for (let i = 0; i < arr.length; i++) {
+        if (i < n - 1) continue;
+        if (prev === null) { let s = 0; for (let j = 0; j < n; j++) s += arr[i - j]; prev = s / n; }
+        else prev = arr[i] * k + prev * (1 - k);
+        out[i] = prev;
+    }
+    return out;
+}
+function _indRsi(arr, n) {
+    if (_ind) return _ind.rsi(arr, n);
+    const out = new Array(arr.length).fill(null);
+    let ag = 0, al = 0;
+    for (let i = 1; i <= n; i++) { const d = arr[i] - arr[i-1]; if (d > 0) ag += d; else al -= d; }
+    ag /= n; al /= n;
+    for (let i = n; i < arr.length; i++) {
+        if (i > n) { const d = arr[i]-arr[i-1]; ag=(ag*(n-1)+Math.max(d,0))/n; al=(al*(n-1)+Math.max(-d,0))/n; }
+        out[i] = 100 - 100 / (1 + (al === 0 ? 1e9 : ag / al));
+    }
+    return out;
+}
+function _indMacd(closes, fast, slow, sig) {
+    if (_ind) return _ind.macd(closes, fast, slow, sig);
+    const fE = _indEma(closes, fast), sE = _indEma(closes, slow);
+    const ml = closes.map((_, i) => fE[i] != null && sE[i] != null ? fE[i] - sE[i] : null);
+    const sl = new Array(closes.length).fill(null);
+    const k = 2 / (sig + 1); let prev = null, cnt = 0;
+    for (let i = 0; i < closes.length; i++) {
+        if (ml[i] == null) continue; cnt++;
+        prev = prev == null ? ml[i] : ml[i] * k + prev * (1 - k);
+        if (cnt >= sig) sl[i] = prev;
+    }
+    return { macd: ml, signal: sl };
+}
+function _indBoll(arr, n, mult) {
+    if (_ind) return _ind.bollinger(arr, n, mult);
+    const out = new Array(arr.length).fill(null);
+    for (let i = n - 1; i < arr.length; i++) {
+        let sum = 0; for (let j = 0; j < n; j++) sum += arr[i-j]; const mean = sum / n;
+        let vs = 0; for (let j = 0; j < n; j++) vs += (arr[i-j]-mean)**2;
+        const std = Math.sqrt(vs / n);
+        out[i] = { upper: mean + mult * std, middle: mean, lower: mean - mult * std };
+    }
+    return out;
+}
+function _indDonch(closes, n) {
+    if (_ind) return _ind.donchian(closes, n);
+    const out = new Array(closes.length).fill(null);
+    for (let i = n; i < closes.length; i++) {
+        let hi = -Infinity, lo = Infinity;
+        for (let j = i-n; j < i; j++) { if (closes[j] > hi) hi = closes[j]; if (closes[j] < lo) lo = closes[j]; }
+        out[i] = { high: hi, low: lo };
+    }
+    return out;
+}
+function _indStoch(candles, kP, dP) {
+    if (_ind) return _ind.stochastic(candles, kP, dP);
+    const k = new Array(candles.length).fill(null);
+    for (let i = kP-1; i < candles.length; i++) {
+        let hi = -Infinity, lo = Infinity;
+        for (let j = i-kP+1; j <= i; j++) { if (candles[j].high > hi) hi=candles[j].high; if (candles[j].low < lo) lo=candles[j].low; }
+        k[i] = hi === lo ? 50 : (candles[i].close - lo) / (hi - lo) * 100;
+    }
+    const d = new Array(candles.length).fill(null);
+    for (let i = kP+dP-2; i < candles.length; i++) {
+        let sum = 0, ok = true;
+        for (let j = i-dP+1; j <= i; j++) { if (k[j] == null) { ok=false; break; } sum += k[j]; }
+        if (ok) d[i] = sum / dP;
+    }
+    return { k, d };
+}
+function _indSupertrend(candles, period, mult) {
+    if (_ind) return _ind.supertrend(candles, period, mult);
+    const tr = candles.map((c,i) => { if (!i) return c.high-c.low; const pc=candles[i-1].close; return Math.max(c.high-c.low,Math.abs(c.high-pc),Math.abs(c.low-pc)); });
+    const atr = new Array(candles.length).fill(null);
+    let sum = 0; for (let i = 0; i < period; i++) sum += tr[i]; atr[period-1] = sum/period;
+    for (let i = period; i < candles.length; i++) atr[i] = (atr[i-1]*(period-1)+tr[i])/period;
+    const upper=new Array(candles.length).fill(null), lower=new Array(candles.length).fill(null), dir=new Array(candles.length).fill(0);
+    for (let i = period-1; i < candles.length; i++) {
+        const hl2=(candles[i].high+candles[i].low)/2, bu=hl2+mult*atr[i], bl=hl2-mult*atr[i];
+        if (i===period-1) { upper[i]=bu; lower[i]=bl; dir[i]=1; }
+        else {
+            upper[i]=(bu<upper[i-1]||candles[i-1].close>upper[i-1])?bu:upper[i-1];
+            lower[i]=(bl>lower[i-1]||candles[i-1].close<lower[i-1])?bl:lower[i-1];
+            if (dir[i-1]===-1) dir[i]=candles[i].close>upper[i]?1:-1;
+            else dir[i]=candles[i].close<lower[i]?-1:1;
+        }
+    }
+    return { dir };
+}
+function _indCCI(candles, period) {
+    if (_ind) return _ind.cci(candles, period);
+    const out = new Array(candles.length).fill(null);
+    for (let i = period-1; i < candles.length; i++) {
+        const tps = []; for (let j=i-period+1; j<=i; j++) tps.push((candles[j].high+candles[j].low+candles[j].close)/3);
+        const mean = tps.reduce((a,b)=>a+b,0)/period;
+        const mad  = tps.reduce((a,b)=>a+Math.abs(b-mean),0)/period;
+        out[i] = mad===0?0:(tps[tps.length-1]-mean)/(0.015*mad);
+    }
+    return out;
+}
+function _indROC(closes, period) {
+    if (_ind) return _ind.roc(closes, period);
+    return closes.map((c,i) => i<period||closes[i-period]===0?null:(c-closes[i-period])/closes[i-period]*100);
+}
+function _indIchimoku(candles, tenkan, kijun) {
+    if (_ind) return _ind.ichimoku(candles, tenkan, kijun);
+    function mid(arr, p, i) { let hi=-Infinity, lo=Infinity; for (let j=i-p+1;j<=i;j++){if(arr[j].high>hi)hi=arr[j].high;if(arr[j].low<lo)lo=arr[j].low;} return (hi+lo)/2; }
+    const t=new Array(candles.length).fill(null), k=new Array(candles.length).fill(null);
+    for (let i=0;i<candles.length;i++){if(i>=tenkan-1)t[i]=mid(candles,tenkan,i);if(i>=kijun-1)k[i]=mid(candles,kijun,i);}
+    return { tenkan:t, kijun:k };
+}
+function _indPSAR(candles, step, maxStep) {
+    if (_ind) return _ind.psar(candles, step, maxStep);
+    const dir=new Array(candles.length).fill(0); if (candles.length<2) return {dir};
+    let bull=true, sar=candles[0].low, ep=candles[0].high, af=step; dir[0]=1;
+    for (let i=1;i<candles.length;i++){
+        const pSar=sar, pEp=ep;
+        if(bull){sar=pSar+af*(pEp-pSar);sar=Math.min(sar,candles[i-1].low,i>=2?candles[i-2].low:candles[i-1].low);if(candles[i].low<sar){bull=false;sar=pEp;ep=candles[i].low;af=step;dir[i]=-1;}else{dir[i]=1;if(candles[i].high>ep){ep=candles[i].high;af=Math.min(af+step,maxStep);}}}
+        else{sar=pSar+af*(pEp-pSar);sar=Math.max(sar,candles[i-1].high,i>=2?candles[i-2].high:candles[i-1].high);if(candles[i].high>sar){bull=true;sar=pEp;ep=candles[i].high;af=step;dir[i]=1;}else{dir[i]=-1;if(candles[i].low<ep){ep=candles[i].low;af=Math.min(af+step,maxStep);}}}
+    }
+    return { dir };
+}
+function _indWilliamsR(candles, period) {
+    if (_ind) return _ind.williamsr(candles, period);
+    const out=new Array(candles.length).fill(null);
+    for (let i=period-1;i<candles.length;i++){let hi=-Infinity,lo=Infinity;for(let j=i-period+1;j<=i;j++){if(candles[j].high>hi)hi=candles[j].high;if(candles[j].low<lo)lo=candles[j].low;}out[i]=hi===lo?-50:(hi-candles[i].close)/(hi-lo)*-100;}
+    return out;
+}
+function _indADX(candles, period) {
+    if (_ind) return _ind.adx(candles, period);
+    const n=candles.length, tr=new Array(n).fill(0), dmP=new Array(n).fill(0), dmM=new Array(n).fill(0);
+    for (let i=1;i<n;i++){const hd=candles[i].high-candles[i-1].high,ld=candles[i-1].low-candles[i].low,pc=candles[i-1].close;tr[i]=Math.max(candles[i].high-candles[i].low,Math.abs(candles[i].high-pc),Math.abs(candles[i].low-pc));dmP[i]=hd>ld&&hd>0?hd:0;dmM[i]=ld>hd&&ld>0?ld:0;}
+    function ws(arr){const out=new Array(n).fill(null);let sum=0;for(let i=1;i<=period;i++)sum+=arr[i];out[period]=sum;for(let i=period+1;i<n;i++)out[i]=out[i-1]-out[i-1]/period+arr[i];return out;}
+    const sTR=ws(tr),sDMp=ws(dmP),sDMm=ws(dmM),diP=new Array(n).fill(null),diM=new Array(n).fill(null),dx=new Array(n).fill(null);
+    for(let i=period;i<n;i++){if(!sTR[i])continue;diP[i]=sDMp[i]/sTR[i]*100;diM[i]=sDMm[i]/sTR[i]*100;const s=diP[i]+diM[i];dx[i]=s===0?0:Math.abs(diP[i]-diM[i])/s*100;}
+    const adxOut=new Array(n).fill(null),dxV=[],dxI=[];
+    for(let i=0;i<n;i++){if(dx[i]!==null){dxV.push(dx[i]);dxI.push(i);}}
+    if(dxV.length>=period){let s2=0;for(let i=0;i<period;i++)s2+=dxV[i];adxOut[dxI[period-1]]=s2/period;for(let i=period;i<dxV.length;i++)adxOut[dxI[i]]=(adxOut[dxI[i-1]]*(period-1)+dxV[i])/period;}
+    return {diP,diM,adx:adxOut};
+}
+function _indKeltner(candles, period, mult) {
+    if (_ind) return _ind.keltner(candles, period, mult);
+    const closes=candles.map(c=>c.close),em=_indEma(closes,period);
+    const tr=candles.map((c,i)=>!i?c.high-c.low:Math.max(c.high-c.low,Math.abs(c.high-candles[i-1].close),Math.abs(c.low-candles[i-1].close)));
+    const atr=_indEma(tr,period),upper=new Array(candles.length).fill(null),lower=new Array(candles.length).fill(null);
+    for(let i=0;i<candles.length;i++){if(em[i]!=null&&atr[i]!=null){upper[i]=em[i]+mult*atr[i];lower[i]=em[i]-mult*atr[i];}}
+    return {upper,lower};
+}
+function _indTRIX(closes, period) {
+    if (_ind) return _ind.trix(closes, period);
+    const k=2/(period+1);
+    function sm(src){const out=new Array(src.length).fill(null),vs=[],is=[];for(let i=0;i<src.length;i++){if(src[i]!=null){vs.push(src[i]);is.push(i);}}if(vs.length<period)return out;let sum=0;for(let i=0;i<period;i++)sum+=vs[i];let prev=sum/period;out[is[period-1]]=prev;for(let i=period;i<vs.length;i++){prev=vs[i]*k+prev*(1-k);out[is[i]]=prev;}return out;}
+    const e3=sm(sm(sm(closes))),trix=new Array(closes.length).fill(null);
+    for(let i=1;i<closes.length;i++){if(e3[i]!=null&&e3[i-1]!=null&&e3[i-1]!==0)trix[i]=(e3[i]-e3[i-1])/e3[i-1]*100;}
+    return trix;
+}
+function _indCMO(closes, period) {
+    if (_ind) return _ind.cmo(closes, period);
+    const out=new Array(closes.length).fill(null);
+    for(let i=period;i<closes.length;i++){let up=0,dn=0;for(let j=i-period+1;j<=i;j++){const d=closes[j]-closes[j-1];if(d>0)up+=d;else dn-=d;}out[i]=(up+dn)===0?0:(up-dn)/(up+dn)*100;}
+    return out;
+}
+function _indHullMA(closes, period) {
+    if (_ind) return _ind.hullma(closes, period);
+    function wma(arr,n){const den=n*(n+1)/2,out=new Array(arr.length).fill(null);for(let i=n-1;i<arr.length;i++){let sum=0,ok=true;for(let j=0;j<n;j++){if(arr[i-j]==null){ok=false;break;}sum+=arr[i-j]*(n-j);}if(ok)out[i]=sum/den;}return out;}
+    const h=Math.max(2,Math.round(period/2)),sq=Math.max(2,Math.round(Math.sqrt(period)));
+    const wH=wma(closes,h),wF=wma(closes,period),diff=closes.map((_,i)=>wH[i]!=null&&wF[i]!=null?2*wH[i]-wF[i]:null);
+    return wma(diff,sq);
+}
+function _indOBV(candles) {
+    if (_ind) return _ind.obv(candles);
+    const out=new Array(candles.length).fill(0);out[0]=candles[0].volume;
+    for(let i=1;i<candles.length;i++){if(candles[i].close>candles[i-1].close)out[i]=out[i-1]+candles[i].volume;else if(candles[i].close<candles[i-1].close)out[i]=out[i-1]-candles[i].volume;else out[i]=out[i-1];}
+    return out;
+}
+function _indVWAP(candles, period) {
+    if (_ind) return _ind.vwap(candles, period);
+    const out=new Array(candles.length).fill(null);
+    for(let i=period-1;i<candles.length;i++){let spv=0,sv=0;for(let j=i-period+1;j<=i;j++){const tp=(candles[j].high+candles[j].low+candles[j].close)/3;spv+=tp*candles[j].volume;sv+=candles[j].volume;}out[i]=sv===0?null:spv/sv;}
+    return out;
+}
+function _indMeanRevSma(closes,period){return _indSma(closes,period);}
+
+function _runBacktest(candles, strategy, params) {
+    const closes = candles.map(c => c.close);
+    const times  = candles.map(c => Math.floor(c.ts / 1000));
+    const sigs   = new Array(candles.length).fill(null);
+
+    switch (strategy) {
+        case 'ma_cross': {
+            const {fast=9,slow=21}=params;
+            const fl=_indEma(closes,fast),sl=_indEma(closes,slow);
+            for(let i=1;i<candles.length;i++){if(fl[i]==null||fl[i-1]==null||sl[i]==null)continue;if(fl[i]>sl[i]&&fl[i-1]<=sl[i-1])sigs[i]='buy';else if(fl[i]<sl[i]&&fl[i-1]>=sl[i-1])sigs[i]='sell';}
+            break;
+        }
+        case 'rsi_bands': {
+            const {ob=70,os=30}=params;
+            const rv=_indRsi(closes,14);
+            for(let i=1;i<candles.length;i++){if(rv[i]==null||rv[i-1]==null)continue;if(rv[i-1]<=os&&rv[i]>os)sigs[i]='buy';else if(rv[i-1]>=ob&&rv[i]<ob)sigs[i]='sell';}
+            break;
+        }
+        case 'bb_bounce': {
+            const {period=20}=params;
+            const bb=_indBoll(closes,period,2.0);
+            for(let i=1;i<candles.length;i++){if(!bb[i]||!bb[i-1])continue;if(closes[i-1]<bb[i-1].lower&&closes[i]>=bb[i].lower)sigs[i]='buy';else if(closes[i-1]<bb[i-1].upper&&closes[i]>=bb[i].upper)sigs[i]='sell';}
+            break;
+        }
+        case 'macd': {
+            const {fast=12,slow=26,sig=9}=params;
+            const md=_indMacd(closes,fast,slow,sig);
+            for(let i=1;i<candles.length;i++){if(md.macd[i]==null||md.signal[i]==null||md.macd[i-1]==null||md.signal[i-1]==null)continue;if(md.macd[i]>md.signal[i]&&md.macd[i-1]<=md.signal[i-1])sigs[i]='buy';else if(md.macd[i]<md.signal[i]&&md.macd[i-1]>=md.signal[i-1])sigs[i]='sell';}
+            break;
+        }
+        case 'donchian': {
+            const {period=20}=params;
+            const dc=_indDonch(closes,period);
+            for(let i=1;i<candles.length;i++){if(!dc[i])continue;if(closes[i]>dc[i].high)sigs[i]='buy';else if(closes[i]<dc[i].low)sigs[i]='sell';}
+            break;
+        }
+        case 'mean_rev': {
+            const {period=20,dev=0.02}=params;
+            const ms=_indMeanRevSma(closes,period);
+            for(let i=1;i<candles.length;i++){if(ms[i]==null||ms[i-1]==null)continue;const d=(closes[i]-ms[i])/ms[i],pd=(closes[i-1]-ms[i-1])/ms[i-1];if(pd<-dev&&d>=-dev)sigs[i]='buy';else if(pd<0&&d>=0)sigs[i]='sell';}
+            break;
+        }
+        case 'stoch': {
+            const {k:kP=14,d:dP=3,ob=80,os=20}=params;
+            const st=_indStoch(candles,kP,dP);
+            for(let i=1;i<candles.length;i++){if(st.k[i]==null||st.k[i-1]==null)continue;if(st.k[i-1]<=os&&st.k[i]>os)sigs[i]='buy';else if(st.k[i-1]>=ob&&st.k[i]<ob)sigs[i]='sell';}
+            break;
+        }
+        case 'supertrend': {
+            const {period=10,mult=3}=params;
+            const sv=_indSupertrend(candles,period,mult);
+            for(let i=1;i<candles.length;i++){if(sv.dir[i]===0||sv.dir[i-1]===0)continue;if(sv.dir[i-1]!==1&&sv.dir[i]===1)sigs[i]='buy';else if(sv.dir[i-1]!==-1&&sv.dir[i]===-1)sigs[i]='sell';}
+            break;
+        }
+        case 'cci': {
+            const {period=20,thresh=100}=params;
+            const cv=_indCCI(candles,period);
+            for(let i=1;i<candles.length;i++){if(cv[i]==null||cv[i-1]==null)continue;if(cv[i-1]<=-thresh&&cv[i]>-thresh)sigs[i]='buy';else if(cv[i-1]>=thresh&&cv[i]<thresh)sigs[i]='sell';}
+            break;
+        }
+        case 'roc': {
+            const {period=10}=params;
+            const rv=_indROC(closes,period);
+            for(let i=1;i<candles.length;i++){if(rv[i]==null||rv[i-1]==null)continue;if(rv[i-1]<=0&&rv[i]>0)sigs[i]='buy';else if(rv[i-1]>=0&&rv[i]<0)sigs[i]='sell';}
+            break;
+        }
+        case 'ichimoku': {
+            const {tenkan=9,kijun=26}=params;
+            const ich=_indIchimoku(candles,tenkan,kijun);
+            for(let i=1;i<candles.length;i++){if(ich.tenkan[i]==null||ich.kijun[i]==null||ich.tenkan[i-1]==null||ich.kijun[i-1]==null)continue;if(ich.tenkan[i-1]<=ich.kijun[i-1]&&ich.tenkan[i]>ich.kijun[i])sigs[i]='buy';else if(ich.tenkan[i-1]>=ich.kijun[i-1]&&ich.tenkan[i]<ich.kijun[i])sigs[i]='sell';}
+            break;
+        }
+        case 'psar': {
+            const {step=0.02,maxStep=0.2}=params;
+            const ps=_indPSAR(candles,step,maxStep);
+            for(let i=1;i<candles.length;i++){if(ps.dir[i-1]!==1&&ps.dir[i]===1)sigs[i]='buy';else if(ps.dir[i-1]!==-1&&ps.dir[i]===-1)sigs[i]='sell';}
+            break;
+        }
+        case 'williams_r': {
+            const {period=14,ob=-20,os=-80}=params;
+            const wr=_indWilliamsR(candles,period);
+            for(let i=1;i<candles.length;i++){if(wr[i]==null||wr[i-1]==null)continue;if(wr[i-1]<=os&&wr[i]>os)sigs[i]='buy';else if(wr[i-1]>=ob&&wr[i]<ob)sigs[i]='sell';}
+            break;
+        }
+        case 'adx': {
+            const {period=14,thresh=25}=params;
+            const av=_indADX(candles,period);
+            for(let i=1;i<candles.length;i++){if(av.diP[i]==null||av.diM[i]==null||av.adx[i]==null||av.diP[i-1]==null||av.diM[i-1]==null)continue;if(av.adx[i]<thresh)continue;if(av.diP[i-1]<=av.diM[i-1]&&av.diP[i]>av.diM[i])sigs[i]='buy';else if(av.diP[i-1]>=av.diM[i-1]&&av.diP[i]<av.diM[i])sigs[i]='sell';}
+            break;
+        }
+        case 'keltner': {
+            const {period=20,mult=1.5}=params;
+            const kc=_indKeltner(candles,period,mult);
+            for(let i=1;i<candles.length;i++){if(kc.upper[i]==null||kc.lower[i]==null||kc.upper[i-1]==null||kc.lower[i-1]==null)continue;if(closes[i-1]<kc.lower[i-1]&&closes[i]>=kc.lower[i])sigs[i]='buy';else if(closes[i-1]<kc.upper[i-1]&&closes[i]>=kc.upper[i])sigs[i]='sell';}
+            break;
+        }
+        case 'trix': {
+            const {period=18}=params;
+            const tx=_indTRIX(closes,period);
+            for(let i=1;i<candles.length;i++){if(tx[i]==null||tx[i-1]==null)continue;if(tx[i-1]<=0&&tx[i]>0)sigs[i]='buy';else if(tx[i-1]>=0&&tx[i]<0)sigs[i]='sell';}
+            break;
+        }
+        case 'cmo': {
+            const {period=14,thresh=50}=params;
+            const cv=_indCMO(closes,period);
+            for(let i=1;i<candles.length;i++){if(cv[i]==null||cv[i-1]==null)continue;if(cv[i-1]<=-thresh&&cv[i]>-thresh)sigs[i]='buy';else if(cv[i-1]>=thresh&&cv[i]<thresh)sigs[i]='sell';}
+            break;
+        }
+        case 'hull': {
+            const {fast=9,slow=21}=params;
+            const hF=_indHullMA(closes,fast),hS=_indHullMA(closes,slow);
+            for(let i=1;i<candles.length;i++){if(hF[i]==null||hS[i]==null||hF[i-1]==null||hS[i-1]==null)continue;if(hF[i-1]<=hS[i-1]&&hF[i]>hS[i])sigs[i]='buy';else if(hF[i-1]>=hS[i-1]&&hF[i]<hS[i])sigs[i]='sell';}
+            break;
+        }
+        case 'vwap': {
+            const {period=20,thresh=0.02}=params;
+            const vw=_indVWAP(candles,period);
+            for(let i=1;i<candles.length;i++){if(vw[i]==null||vw[i-1]==null)continue;const d=(closes[i]-vw[i])/vw[i],pd=(closes[i-1]-vw[i-1])/vw[i-1];if(pd<-thresh&&d>=-thresh)sigs[i]='buy';else if(pd<thresh&&d>=thresh)sigs[i]='sell';}
+            break;
+        }
+        case 'obv': {
+            const {period=20}=params;
+            const ov=_indOBV(candles),os2=_indSma(ov,period);
+            for(let i=1;i<candles.length;i++){if(os2[i]==null||os2[i-1]==null)continue;if(ov[i-1]<=os2[i-1]&&ov[i]>os2[i])sigs[i]='buy';else if(ov[i-1]>=os2[i-1]&&ov[i]<os2[i])sigs[i]='sell';}
+            break;
+        }
+    }
+
+    let equity=1.0, inTrade=false, entry=0;
+    const equityCurve=[], trades=[], buyX=[], buyY=[], sellX=[], sellY=[];
+    for(let i=0;i<candles.length;i++){
+        if(sigs[i]==='buy'&&!inTrade){inTrade=true;entry=closes[i];buyX.push(times[i]);buyY.push(closes[i]);}
+        else if(sigs[i]==='sell'&&inTrade){const r=closes[i]/entry;equity*=r;trades.push(r);inTrade=false;sellX.push(times[i]);sellY.push(closes[i]);}
+        equityCurve.push({time:times[i],value:equity});
+    }
+    const wins=trades.filter(r=>r>1).length;
+    const winRate=trades.length>0?(wins/trades.length)*100:0;
+    let peak=1, maxDD=0;
+    for(const p of equityCurve){if(p.value>peak)peak=p.value;maxDD=Math.max(maxDD,(peak-p.value)/peak);}
+    return {totalReturn:(equity-1)*100,tradeCount:trades.length,winRate,maxDD:maxDD*100,equityCurve,buyX,buyY,sellX,sellY};
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function sseChunk(res, text) {
@@ -119,6 +463,11 @@ function installPythonUtils() {
 
 // ── CSV helpers ────────────────────────────────────────────────────────────────
 
+function parseCSVText(text) {
+    if (_csv) return _csv.parseCSV(text);
+    return _parseCSVTextJS(text);
+}
+
 function parseTimestamp(val) {
     if (val == null || val === '') return null;
     const s = String(val).trim();
@@ -128,7 +477,7 @@ function parseTimestamp(val) {
     return isNaN(d) ? null : d.getTime();
 }
 
-function parseCSVText(text) {
+function _parseCSVTextJS(text) {
     const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
         .map(l => l.trim()).filter(l => l.length);
     if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
@@ -367,6 +716,19 @@ function startServer(cfg) {
             const columns = rows.length ? Object.keys(rows[0]) : [];
             res.json({ columns, rows: rows.map(r => columns.map(c => r[c])), total: rows.length });
         } catch (e) { res.status(400).json({ error: e.message }); }
+    });
+
+    // ── Backtest API (C++ accelerated) ───────────────────────────────────────
+    app.post('/api/backtest', (req, res) => {
+        const { candles, strategy, params = {} } = req.body || {};
+        if (!candles || !strategy) return res.status(400).json({ error: 'candles and strategy required' });
+        if (candles.length < 10) return res.status(400).json({ error: 'Need at least 10 candles' });
+        try {
+            const result = _runBacktest(candles, strategy, params);
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     // ── Alerts API ────────────────────────────────────────────────────────────
