@@ -2984,8 +2984,10 @@ function initDragResize() {
     // Restore persisted panel sizes
     var savedChartH = parseInt(localStorage.getItem('cc-chart-h') || '0', 10);
     if (savedChartH >= 150) {
+        var colH0 = quantMain.parentElement.offsetHeight || (window.innerHeight - 56);
+        var maxH0 = Math.max(150, colH0 - 160); // keep ≥160px for lower panels
         quantMain.style.flex   = 'none';
-        quantMain.style.height = savedChartH + 'px';
+        quantMain.style.height = Math.min(savedChartH, maxH0) + 'px';
     }
     var savedAiW = parseInt(localStorage.getItem('cc-ai-w') || '0', 10);
     if (savedAiW >= 200) {
@@ -3053,7 +3055,9 @@ function initDragResize() {
             drag.el.style.maxHeight = h + 'px';
         } else if (drag.type === 'panel-v') {
             // Drag down → chart grows; drag up → chart shrinks
-            var newH = Math.max(150, drag.startH + (e.clientY - drag.startY));
+            var colH = quantMain.parentElement.offsetHeight || (window.innerHeight - 56);
+            var maxH = Math.max(150, colH - 160); // keep ≥160px for lower panels
+            var newH = Math.max(150, Math.min(maxH, drag.startH + (e.clientY - drag.startY)));
             quantMain.style.flex   = 'none';
             quantMain.style.height = newH + 'px';
         } else if (drag.type === 'ai-h') {
