@@ -1118,6 +1118,10 @@ function quantRenderAll(bt) {
         Q.charts.equity.timeScale().fitContent();
     }
 
+    // Reset price scale so switching assets repositions the y-axis
+    Q.charts.candle.priceScale('right').applyOptions({ autoScale: true });
+    Q.charts.rsi.priceScale('right').applyOptions({ autoScale: true });
+
     Q.charts.candle.timeScale().fitContent();
     Q.charts.rsi.timeScale().fitContent();
 }
