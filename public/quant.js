@@ -1129,7 +1129,7 @@ function quantRenderAll(bt) {
 /* ── UI binding ─────────────────────────────────────────────────────── */
 function quantBindUI() {
     // Symbol pills (toolbar + extended panel + stocks)
-    var _symSel = '#quantSymbolPills .quant-pill, #quantExtraSymbolPills .quant-pill, #quantStockPills .quant-pill, #quantExtraStockPills .quant-pill';
+    var _symSel = '#quantSymbolPills .quant-pill, #quantExtraSymbolPills .quant-pill';
     document.querySelectorAll(_symSel).forEach(function (btn) {
         btn.addEventListener('click', function () {
             document.querySelectorAll(_symSel).forEach(function (b) { b.classList.remove('active'); });
@@ -1360,7 +1360,6 @@ function quantBindUI() {
         });
     }
     bindExpand('quantMoreAssetsBtn',  'quantMoreAssetsPanel');
-    bindExpand('quantMoreStocksBtn',  'quantMoreStocksPanel');
     bindExpand('quantMoreIndBtn',     'quantMoreIndPanel');
     bindExpand('quantMoreStratsBtn',  'quantMoreStratsPanel');
 

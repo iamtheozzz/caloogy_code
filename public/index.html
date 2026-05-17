@@ -385,8 +385,9 @@
       <div class="qt-group" id="quantSymbolPills">
         <button class="quant-pill active" data-val="BTCUSDT">BTC</button>
         <button class="quant-pill" data-val="ETHUSDT">ETH</button>
-        <button class="quant-pill" data-val="SOLUSDT">SOL</button>
-        <button class="quant-pill" data-val="BNBUSDT">BNB</button>
+        <button class="quant-pill" data-val="AAPL">AAPL</button>
+        <button class="quant-pill" data-val="TSLA">TSLA</button>
+        <button class="quant-pill" data-val="NVDA">NVDA</button>
         <button class="qt-expand-btn" id="quantMoreAssetsBtn" title="More assets">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
@@ -397,17 +398,6 @@
         <button class="quant-pill" data-val="4H">4H</button>
         <button class="quant-pill" data-val="1D">1D</button>
         <button class="quant-pill" data-val="1W">1W</button>
-      </div>
-      <div class="qt-sep"></div>
-      <div class="qt-group" id="quantStockPills">
-        <button class="quant-pill" data-val="AAPL">AAPL</button>
-        <button class="quant-pill" data-val="TSLA">TSLA</button>
-        <button class="quant-pill" data-val="NVDA">NVDA</button>
-        <button class="quant-pill" data-val="MSFT">MSFT</button>
-        <button class="quant-pill" data-val="GOOGL">GOOGL</button>
-        <button class="qt-expand-btn" id="quantMoreStocksBtn" title="More stocks">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
       </div>
       <div class="qt-sep"></div>
       <label class="qt-ind-ctrl">
@@ -483,10 +473,31 @@
     </div>
   </div>
 
-  <!-- ── More assets dropdown ── -->
+  <!-- ── More assets dropdown (all extra crypto + stocks) ── -->
   <div class="qt-dropdown quant-hidden" id="quantMoreAssetsPanel">
     <span class="qt-dropdown-label">More</span>
     <div class="qt-group" id="quantExtraSymbolPills">
+      <button class="quant-pill" data-val="SOLUSDT">SOL</button>
+      <button class="quant-pill" data-val="BNBUSDT">BNB</button>
+      <button class="quant-pill" data-val="MSFT">MSFT</button>
+      <button class="quant-pill" data-val="GOOGL">GOOGL</button>
+      <button class="quant-pill" data-val="AMZN">AMZN</button>
+      <button class="quant-pill" data-val="META">META</button>
+      <button class="quant-pill" data-val="NFLX">NFLX</button>
+      <button class="quant-pill" data-val="AMD">AMD</button>
+      <button class="quant-pill" data-val="INTC">INTC</button>
+      <button class="quant-pill" data-val="JPM">JPM</button>
+      <button class="quant-pill" data-val="BAC">BAC</button>
+      <button class="quant-pill" data-val="GS">GS</button>
+      <button class="quant-pill" data-val="DIS">DIS</button>
+      <button class="quant-pill" data-val="UBER">UBER</button>
+      <button class="quant-pill" data-val="SPY">SPY</button>
+      <button class="quant-pill" data-val="QQQ">QQQ</button>
+      <button class="quant-pill" data-val="IWM">IWM</button>
+      <button class="quant-pill" data-val="GLD">GLD</button>
+      <button class="quant-pill" data-val="XOM">XOM</button>
+      <button class="quant-pill" data-val="V">V</button>
+      <button class="quant-pill" data-val="MA">MA</button>
       <button class="quant-pill" data-val="XRPUSDT">XRP</button>
       <button class="quant-pill" data-val="DOGEUSDT">DOGE</button>
       <button class="quant-pill" data-val="ADAUSDT">ADA</button>
@@ -516,30 +527,6 @@
       <button class="quant-pill" data-val="FETUSDT">FET</button>
       <button class="quant-pill" data-val="HBARUSDT">HBAR</button>
       <button class="quant-pill" data-val="VETUSDT">VET</button>
-    </div>
-  </div>
-
-  <!-- ── More stocks dropdown ── -->
-  <div class="qt-dropdown quant-hidden" id="quantMoreStocksPanel">
-    <span class="qt-dropdown-label">Stocks</span>
-    <div class="qt-group" id="quantExtraStockPills">
-      <button class="quant-pill" data-val="AMZN">AMZN</button>
-      <button class="quant-pill" data-val="META">META</button>
-      <button class="quant-pill" data-val="NFLX">NFLX</button>
-      <button class="quant-pill" data-val="AMD">AMD</button>
-      <button class="quant-pill" data-val="INTC">INTC</button>
-      <button class="quant-pill" data-val="JPM">JPM</button>
-      <button class="quant-pill" data-val="BAC">BAC</button>
-      <button class="quant-pill" data-val="GS">GS</button>
-      <button class="quant-pill" data-val="DIS">DIS</button>
-      <button class="quant-pill" data-val="UBER">UBER</button>
-      <button class="quant-pill" data-val="SPY">SPY</button>
-      <button class="quant-pill" data-val="QQQ">QQQ</button>
-      <button class="quant-pill" data-val="IWM">IWM</button>
-      <button class="quant-pill" data-val="GLD">GLD</button>
-      <button class="quant-pill" data-val="XOM">XOM</button>
-      <button class="quant-pill" data-val="V">V</button>
-      <button class="quant-pill" data-val="MA">MA</button>
     </div>
   </div>
 
