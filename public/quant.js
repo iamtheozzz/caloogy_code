@@ -1449,6 +1449,18 @@ function quantBindUI() {
     bindSubToggle('quantRsiToggle',  'quantRsiDiv');
     bindSubToggle('quantMacdToggle', 'quantMacdDiv');
 
+    // Strategy Builder toggle
+    var stratToggleBtn = document.getElementById('quantStratToggle');
+    if (stratToggleBtn) {
+        stratToggleBtn.addEventListener('click', function () {
+            var wrap = document.getElementById('quantSbWrap');
+            if (!wrap) return;
+            var open = wrap.style.display !== 'none';
+            wrap.style.display = open ? 'none' : '';
+            stratToggleBtn.classList.toggle('active', !open);
+        });
+    }
+
     var aiToggleBtn = document.getElementById('quantAiToggle');
     if (aiToggleBtn) {
         aiToggleBtn.addEventListener('click', function () {
@@ -2493,6 +2505,7 @@ function initPineEditor() {
         var docked  = wrap.classList.toggle('qt-pine-docked');
         btn.classList.toggle('docked', docked);
         btn.title = docked ? 'Move editor back to bottom' : 'Move editor to right panel';
+        localStorage.setItem('cc-editor-docked', docked ? '1' : '0');
         if (docked) {
             // Insert drag resizer then the editor panel
             var resizer = document.createElement('div');
@@ -2514,6 +2527,7 @@ function initPineEditor() {
                     resizer.classList.remove('dragging');
                     window.removeEventListener('mousemove', onMove);
                     window.removeEventListener('mouseup', onUp);
+                    localStorage.setItem('cc-editor-w', Math.round(wrap.getBoundingClientRect().width));
                     if (Q._pineEditor) Q._pineEditor.refresh();
                 }
                 window.addEventListener('mousemove', onMove);
@@ -3340,6 +3354,17 @@ window._initQuantTab = function () {
     initPineEditor();
     initDataManager();
     initDragResize();
+
+    // Default layout: editor docked to the right
+    // Respect user's explicit choice (cc-editor-docked='0' means they moved it to bottom)
+    if (localStorage.getItem('cc-editor-docked') !== '0') {
+        document.getElementById('qtPineDock').click();
+        var _wrap = document.getElementById('quantPineWrap');
+        if (_wrap) {
+            var _savedW = parseInt(localStorage.getItem('cc-editor-w') || '0', 10);
+            _wrap.style.width = (_savedW >= 200) ? _savedW + 'px' : '50%';
+        }
+    }
     new MutationObserver(function (ms) {
         ms.forEach(function (m) {
             if (m.attributeName === 'data-theme') {

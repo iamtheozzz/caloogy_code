@@ -476,6 +476,7 @@
         <button class="qt-sub-toggle qt-ai-toggle" id="quantAiToggle">AI</button>
         <button class="qt-sub-toggle" id="quantRsiToggle">RSI</button>
         <button class="qt-sub-toggle" id="quantMacdToggle">MACD</button>
+        <button class="qt-sub-toggle" id="quantStratToggle">Strategy</button>
         <button class="qt-sub-toggle" id="quantDataToggle">Data</button>
       </div>
       <button class="qt-run" id="quantRunBacktest">Backtest</button>
@@ -671,7 +672,7 @@
   <div class="qt-vpanel-drag" id="qtVPanelDrag"></div>
 
   <!-- ── Strategy Builder ── -->
-  <div class="qt-sb-wrap" id="quantSbWrap">
+  <div class="qt-sb-wrap" id="quantSbWrap" style="display:none">
     <div class="qt-sb-hdr qt-sb-hdr-toggle" id="quantSbToggle">
       <span class="qt-sb-title">Create your strategy</span>
       <button class="qt-sb-reset quant-hidden" id="quantSbReset" title="Start over">↺ Start over</button>
@@ -828,10 +829,6 @@
 <script>
   if (typeof window._initQuantTab === 'function') {
     window._initQuantTab();
-    document.getElementById('quantRsiToggle').click();
-    document.getElementById('quantMacdToggle').click();
-    document.getElementById('quantAiToggle').click();
-    document.getElementById('quantSbToggle').click();
   }
 </script>
 </body>
