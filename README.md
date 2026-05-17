@@ -32,19 +32,19 @@ npx github:iamtheozzz/caloogy_code
 
 **macOS / Linux**
 ```bash
-npm install -g github:iamtheozzz/caloogy_code
+npm install -g https://github.com/iamtheozzz/caloogy_code/archive/refs/heads/main.tar.gz
 caloogy
 ```
 
 **Windows (PowerShell)**
 ```powershell
-npm install -g github:iamtheozzz/caloogy_code
+npm install -g https://github.com/iamtheozzz/caloogy_code/archive/refs/heads/main.tar.gz
 caloogy
 ```
 
 **Windows (Command Prompt)**
 ```cmd
-npm install -g github:iamtheozzz/caloogy_code
+npm install -g https://github.com/iamtheozzz/caloogy_code/archive/refs/heads/main.tar.gz
 caloogy
 ```
 
