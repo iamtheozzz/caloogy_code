@@ -11,8 +11,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "node scripts/postinstall.js",
-    "postinstall": "cd /tmp && PKG=$(dirname \"$npm_package_json\") && node \"$PKG/scripts/postinstall.js\""
+    "build": "node scripts/postinstall.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

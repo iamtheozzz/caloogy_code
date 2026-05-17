@@ -429,6 +429,19 @@ async function alertsCLI() {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
+    // First-run native setup: runs once after `npm install -g`
+    // __dirname is always the absolute bin/ path, independent of CWD
+    const PKG_ROOT    = path.join(__dirname, '..');
+    const duckdbReady = path.join(PKG_ROOT, 'node_modules', 'duckdb', 'package.json');
+    if (!fs.existsSync(duckdbReady)) {
+        const { spawnSync } = require('child_process');
+        const postinstall   = path.join(PKG_ROOT, 'scripts', 'postinstall.js');
+        if (fs.existsSync(postinstall)) {
+            console.log('\n  First run: setting up native modules…\n');
+            spawnSync(process.execPath, [postinstall], { cwd: PKG_ROOT, stdio: 'inherit' });
+        }
+    }
+
     const args      = process.argv.slice(2);
     const reconfig  = args.includes('--reconfigure') || args.includes('-r');
     const alertMode = args.includes('--alerts')      || args.includes('-a');
