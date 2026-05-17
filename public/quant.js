@@ -1884,6 +1884,221 @@ var _PYTHON_DEFAULT = [
 'print(json.dumps({"plots": plots, "markers": markers}))',
 ].join('\n');
 
+var _R_H = [
+'# Caloogy R Runner',
+'# Candles arrive via stdin as CSV: time,open,high,low,close,volume',
+'# Output: cat(toJSON(list(plots=..., markers=...))) — requires jsonlite',
+'tryCatch(library(jsonlite, quietly=TRUE), error=function(e){',
+'  cat(\'{"error":"jsonlite not found. Run in R: install.packages(\\\\"jsonlite\\\\")"}\')',
+'  quit(status=0)',
+'})',
+'df    <- read.csv(file("stdin"), stringsAsFactors=FALSE)',
+'n     <- nrow(df)',
+'times <- df$time; cl <- df$close; op <- df$open',
+'hi    <- df$high; lo <- df$low;   vl <- df$volume',
+'plots   <- list(); markers <- list()',
+'plo <- function(lbl, vals, clr="#6366f1") {',
+'  plots[[length(plots)+1]] <<- list(',
+'    label=lbl, color=clr,',
+'    data=lapply(seq_len(n), function(i) list(time=times[i], value=round(vals[i],6))))',
+'}',
+'mrk <- function(i, side, txt="") {',
+'  markers[[length(markers)+1]] <<- list(',
+'    time=times[i],',
+'    position=ifelse(side=="buy","belowBar","aboveBar"),',
+'    color=ifelse(side=="buy","#10b981","#f43f5e"),',
+'    shape=ifelse(side=="buy","arrowUp","arrowDown"),',
+'    text=txt)',
+'}',
+'ema_fn <- function(x, span) {',
+'  k <- 2/(span+1); e <- numeric(n); e[1] <- x[1]',
+'  for (i in seq(2,n)) e[i] <- x[i]*k + e[i-1]*(1-k)',
+'  e',
+'}',
+'sma_fn <- function(x, p) sapply(seq_len(n), function(i) if(i<p) NA else mean(x[(i-p+1):i]))',
+'rsi_fn <- function(x, p=14) {',
+'  d <- diff(x); ag <- al <- 0',
+'  for(i in seq_len(p)) { dv <- d[i]; ag <- ag+max(dv,0); al <- al+max(-dv,0) }',
+'  ag <- ag/p; al <- al/p',
+'  r <- c(rep(NA, p), ifelse(al==0,100,100-100/(1+ag/al)))',
+'  for(i in seq(p+1, n-1)) {',
+'    dv <- d[i]; ag <- (ag*(p-1)+max(dv,0))/p; al <- (al*(p-1)+max(-dv,0))/p',
+'    r <- c(r, ifelse(al==0,100,100-100/(1+ag/al)))',
+'  }',
+'  r',
+'}',
+].join('\n');
+
+var _R_DEFAULT = _R_H + [
+'',
+'# ── Example: 20-bar SMA ──────────────────────────────────────────────────────',
+'ma20 <- sma_fn(cl, 20)',
+'plo("SMA 20", ma20, "#f59e0b")',
+'',
+'cat(toJSON(list(plots=plots, markers=markers), auto_unbox=TRUE))',
+].join('\n');
+
+var _CPP_DEFAULT = [
+'// [C++] EMA Cross 9/21',
+'// Candles: CSV via stdin  (time,open,high,low,close,volume)',
+'// Output:  JSON to stdout — {"plots":[...],"markers":[...]}',
+'#include <iostream>',
+'#include <vector>',
+'#include <string>',
+'#include <sstream>',
+'#include <iomanip>',
+'',
+'struct Bar { long long t; double o,h,l,c,v; };',
+'',
+'std::vector<Bar> read_csv() {',
+'    std::vector<Bar> b; std::string line;',
+'    std::getline(std::cin, line); // skip header',
+'    while (std::getline(std::cin, line)) {',
+'        if (line.empty()) continue;',
+'        std::istringstream s(line); Bar r; char x;',
+'        s >> r.t >> x >> r.o >> x >> r.h >> x >> r.l >> x >> r.c >> x >> r.v;',
+'        b.push_back(r);',
+'    }',
+'    return b;',
+'}',
+'',
+'std::vector<double> ema(const std::vector<double>& p, int span) {',
+'    double k = 2.0/(span+1);',
+'    std::vector<double> e(p.size());',
+'    e[0] = p[0];',
+'    for (size_t i = 1; i < p.size(); i++) e[i] = p[i]*k + e[i-1]*(1-k);',
+'    return e;',
+'}',
+'',
+'std::string series(const char* lbl, const char* clr,',
+'                   const std::vector<Bar>& bars, const std::vector<double>& vals) {',
+'    std::ostringstream o;',
+'    o << "{\\\"label\\\":\\\"" << lbl << "\\\",\\\"color\\\":\\\"" << clr << "\\\",\\\"data\\\":[";',
+'    for (size_t i = 0; i < bars.size(); i++) {',
+'        if (i) o << \',\';',
+'        o << "{\\\"time\\\":" << bars[i].t',
+'          << ",\\\"value\\\":" << std::fixed << std::setprecision(4) << vals[i] << \'}\';',
+'    }',
+'    o << "]}";',
+'    return o.str();',
+'}',
+'',
+'int main() {',
+'    auto bars = read_csv();',
+'    int n = (int)bars.size();',
+'    std::vector<double> cl(n);',
+'    for (int i = 0; i < n; i++) cl[i] = bars[i].c;',
+'',
+'    auto e9  = ema(cl, 9);',
+'    auto e21 = ema(cl, 21);',
+'',
+'    std::cout << "{\\\"plots\\\":["',
+'              << series("EMA 9",  "#f59e0b", bars, e9) << \',\'',
+'              << series("EMA 21", "#6366f1", bars, e21)',
+'              << "],\\\"markers\\\":[";',
+'    bool first = true;',
+'    for (int i = 1; i < n; i++) {',
+'        bool buy  = (e9[i-1] <= e21[i-1] && e9[i] > e21[i]);',
+'        bool sell = (e9[i-1] >= e21[i-1] && e9[i] < e21[i]);',
+'        if (!buy && !sell) continue;',
+'        if (!first) std::cout << \',\'; first = false;',
+'        std::cout << "{\\\"time\\\":"  << bars[i].t',
+'                  << ",\\\"position\\\":\\\"" << (buy ? "belowBar" : "aboveBar") << "\\\""',
+'                  << ",\\\"color\\\":\\\""    << (buy ? "#10b981"  : "#f43f5e")  << "\\\""',
+'                  << ",\\\"shape\\\":\\\""    << (buy ? "arrowUp"  : "arrowDown") << "\\\""',
+'                  << ",\\\"text\\\":\\\""     << (buy ? "X+" : "X-") << "\\\"}";',
+'    }',
+'    std::cout << "]}" << std::endl;',
+'    return 0;',
+'}',
+].join('\n');
+
+function runRScript(code) {
+    var status    = document.getElementById('qtPineStatus');
+    var resultsEl = document.getElementById('qtPineResults');
+    var candles   = Q.candles || [];
+    status.textContent = 'Running R…';
+    status.className   = 'qt-pine-status';
+    if (resultsEl) { resultsEl.innerHTML = ''; resultsEl.classList.add('quant-hidden'); }
+
+    Q.userSeries.forEach(function (s) { try { Q.charts.candle.removeSeries(s); } catch (e) {} });
+    Q.userSeries  = [];
+    Q.userMarkers = [];
+
+    fetch('/api/run-r', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ code: code, candles: candles }),
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (result) {
+        if (result.error) throw new Error(result.error);
+        var plots = result.plots || []; var markers = result.markers || []; var _ci = 0;
+        plots.forEach(function (p) {
+            var clr    = p.color || _PINE_AUTO_COLORS[_ci++ % _PINE_AUTO_COLORS.length];
+            var series = Q.charts.candle.addLineSeries({ color: clr, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+            series.setData(p.data || []);
+            Q.userSeries.push(series);
+        });
+        if (markers.length && Q.series.candle) {
+            Q.userMarkers = markers.slice().sort(function (a, b) { return a.time - b.time; });
+            Q.series.candle.setMarkers(Q.userMarkers);
+        }
+        var nP = plots.length, nM = markers.length;
+        status.textContent = 'OK — ' + nP + ' plot' + (nP !== 1 ? 's' : '') + ', ' + nM + ' marker' + (nM !== 1 ? 's' : '');
+        status.className   = 'qt-pine-status ok';
+        if (result.log) { showResults(result.log, false); }
+    })
+    .catch(function (err) {
+        status.textContent = 'Error: ' + (err.message || String(err));
+        status.className   = 'qt-pine-status err';
+        console.error('[R]', err);
+    });
+}
+
+function runCppScript(code) {
+    var status    = document.getElementById('qtPineStatus');
+    var resultsEl = document.getElementById('qtPineResults');
+    var candles   = Q.candles || [];
+    status.textContent = 'Compiling C++…';
+    status.className   = 'qt-pine-status';
+    if (resultsEl) { resultsEl.innerHTML = ''; resultsEl.classList.add('quant-hidden'); }
+
+    Q.userSeries.forEach(function (s) { try { Q.charts.candle.removeSeries(s); } catch (e) {} });
+    Q.userSeries  = [];
+    Q.userMarkers = [];
+
+    fetch('/api/run-cpp', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ code: code, candles: candles }),
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (result) {
+        if (result.error) throw new Error(result.error);
+        var plots = result.plots || []; var markers = result.markers || []; var _ci = 0;
+        plots.forEach(function (p) {
+            var clr    = p.color || _PINE_AUTO_COLORS[_ci++ % _PINE_AUTO_COLORS.length];
+            var series = Q.charts.candle.addLineSeries({ color: clr, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+            series.setData(p.data || []);
+            Q.userSeries.push(series);
+        });
+        if (markers.length && Q.series.candle) {
+            Q.userMarkers = markers.slice().sort(function (a, b) { return a.time - b.time; });
+            Q.series.candle.setMarkers(Q.userMarkers);
+        }
+        var nP = plots.length, nM = markers.length;
+        status.textContent = 'OK — ' + nP + ' plot' + (nP !== 1 ? 's' : '') + ', ' + nM + ' marker' + (nM !== 1 ? 's' : '');
+        status.className   = 'qt-pine-status ok';
+        if (result.log) { showResults(result.log, false); }
+    })
+    .catch(function (err) {
+        status.textContent = 'Error: ' + (err.message || String(err));
+        status.className   = 'qt-pine-status err';
+        console.error('[C++]', err);
+    });
+}
+
 function runPythonScript(code) {
     var status    = document.getElementById('qtPineStatus');
     var resultsEl = document.getElementById('qtPineResults');
@@ -2450,6 +2665,141 @@ var _PINE_TEMPLATES = {
 'GROUP BY symbol, interval',
 'ORDER BY symbol',
     ].join('\n'),
+
+    // ── R templates ──────────────────────────────────────────────────────────
+
+    r_ema_cross: _R_H + [
+'',
+'# [R] EMA Cross 9/21',
+'e9  <- ema_fn(cl, 9)',
+'e21 <- ema_fn(cl, 21)',
+'plo("EMA 9",  e9,  "#f59e0b")',
+'plo("EMA 21", e21, "#6366f1")',
+'for (i in seq(2, n)) {',
+'  if (e9[i-1] <= e21[i-1] && e9[i] > e21[i]) mrk(i, "buy",  "X+")',
+'  if (e9[i-1] >= e21[i-1] && e9[i] < e21[i]) mrk(i, "sell", "X-")',
+'}',
+'cat(toJSON(list(plots=plots, markers=markers), auto_unbox=TRUE))',
+    ].join('\n'),
+
+    r_rsi_signal: _R_H + [
+'',
+'# [R] RSI Signal',
+'rv <- rsi_fn(cl, 14)',
+'plo("RSI", rv, "#818cf8")',
+'for (i in seq(2, n)) {',
+'  if (is.na(rv[i]) || is.na(rv[i-1])) next',
+'  if (rv[i-1] <= 30 && rv[i] > 30) mrk(i, "buy",  "OS")',
+'  if (rv[i-1] >= 70 && rv[i] < 70) mrk(i, "sell", "OB")',
+'}',
+'cat(toJSON(list(plots=plots, markers=markers), auto_unbox=TRUE))',
+    ].join('\n'),
+
+    r_zscore: _R_H + [
+'',
+'# [R] Z-Score Mean Reversion (30-bar)',
+'P   <- 30',
+'ma  <- sma_fn(cl, P)',
+'plo("SMA 30", ma, "#94a3b8")',
+'zs  <- rep(NA, n)',
+'for (i in seq(P, n)) {',
+'  w <- cl[(i-P+1):i]; m <- mean(w); sd <- sd(w)',
+'  zs[i] <- if (sd > 0) (cl[i]-m)/sd else 0',
+'}',
+'u15 <- ma + 1.5 * sapply(seq_len(n), function(i) {',
+'  if (is.na(ma[i])) NA else sd(cl[max(1,i-P+1):i])',
+'})',
+'l15 <- ma - 1.5 * sapply(seq_len(n), function(i) {',
+'  if (is.na(ma[i])) NA else sd(cl[max(1,i-P+1):i])',
+'})',
+'plo("+1.5sd", u15, "#6366f1")',
+'plo("-1.5sd", l15, "#6366f1")',
+'for (i in seq(2, n)) {',
+'  if (is.na(zs[i]) || is.na(zs[i-1])) next',
+'  if (zs[i-1] <= -2 && zs[i] > -2) mrk(i, "buy",  "Z+")',
+'  if (zs[i-1] >= +2 && zs[i] < +2) mrk(i, "sell", "Z-")',
+'}',
+'cat(toJSON(list(plots=plots, markers=markers), auto_unbox=TRUE))',
+    ].join('\n'),
+
+    // ── C++ templates ─────────────────────────────────────────────────────────
+
+    cpp_ema_cross: _CPP_DEFAULT,
+
+    cpp_rsi_signal: [
+'// [C++] RSI Signal (14-period)',
+'// Candles: CSV via stdin  (time,open,high,low,close,volume)',
+'// Output:  JSON to stdout',
+'#include <iostream>',
+'#include <vector>',
+'#include <string>',
+'#include <sstream>',
+'#include <iomanip>',
+'#include <algorithm>',
+'',
+'struct Bar { long long t; double o,h,l,c,v; };',
+'',
+'std::vector<Bar> read_csv() {',
+'    std::vector<Bar> b; std::string line;',
+'    std::getline(std::cin, line);',
+'    while (std::getline(std::cin, line)) {',
+'        if (line.empty()) continue;',
+'        std::istringstream s(line); Bar r; char x;',
+'        s >> r.t >> x >> r.o >> x >> r.h >> x >> r.l >> x >> r.c >> x >> r.v;',
+'        b.push_back(r);',
+'    }',
+'    return b;',
+'}',
+'',
+'std::vector<double> rsi(const std::vector<double>& p, int per) {',
+'    int n = p.size(); std::vector<double> r(n, -1);',
+'    double ag=0, al=0;',
+'    for (int i = 1; i <= per; i++) {',
+'        double d = p[i]-p[i-1]; ag += std::max(d,0.0); al += std::max(-d,0.0);',
+'    }',
+'    ag /= per; al /= per;',
+'    r[per] = al == 0 ? 100.0 : 100.0 - 100.0/(1.0+ag/al);',
+'    for (int i = per+1; i < n; i++) {',
+'        double d = p[i]-p[i-1];',
+'        ag = (ag*(per-1)+std::max(d,0.0))/per;',
+'        al = (al*(per-1)+std::max(-d,0.0))/per;',
+'        r[i] = al == 0 ? 100.0 : 100.0 - 100.0/(1.0+ag/al);',
+'    }',
+'    return r;',
+'}',
+'',
+'int main() {',
+'    auto bars = read_csv(); int n=(int)bars.size();',
+'    std::vector<double> cl(n);',
+'    for (int i=0;i<n;i++) cl[i]=bars[i].c;',
+'    auto rv = rsi(cl, 14);',
+'',
+'    // plots',
+'    std::cout << "{\\\"plots\\\":[{\\\"label\\\":\\\"RSI\\\",\\\"color\\\":\\\"#818cf8\\\",\\\"data\\\":[";',
+'    for (int i=0;i<n;i++) {',
+'        if (rv[i]<0) continue;',
+'        if (i) std::cout << \',\';',
+'        std::cout << "{\\\"time\\\":" << bars[i].t',
+'                  << ",\\\"value\\\":" << std::fixed << std::setprecision(2) << rv[i] << \'}\';',
+'    }',
+'    std::cout << "]}],\\\"markers\\\":[";',
+'    bool first=true;',
+'    for (int i=1;i<n;i++) {',
+'        if (rv[i]<0||rv[i-1]<0) continue;',
+'        bool buy  = rv[i-1]<=30 && rv[i]>30;',
+'        bool sell = rv[i-1]>=70 && rv[i]<70;',
+'        if (!buy && !sell) continue;',
+'        if (!first) std::cout << \',\'; first=false;',
+'        std::cout << "{\\\"time\\\":" << bars[i].t',
+'                  << ",\\\"position\\\":\\\"" << (buy?"belowBar":"aboveBar") << "\\\""',
+'                  << ",\\\"color\\\":\\\""    << (buy?"#10b981":"#f43f5e") << "\\\""',
+'                  << ",\\\"shape\\\":\\\""    << (buy?"arrowUp":"arrowDown") << "\\\""',
+'                  << ",\\\"text\\\":\\\""     << (buy?"OS":"OB") << "\\\"}";',
+'    }',
+'    std::cout << "]}" << std::endl;',
+'    return 0;',
+'}',
+    ].join('\n'),
 };
 
 function initPineEditor() {
@@ -2546,10 +2896,12 @@ function initPineEditor() {
     document.getElementById('qtPineTemplate').addEventListener('change', function (e) {
         var key = e.target.value;
         if (key && _PINE_TEMPLATES[key]) {
-            var isSql = key.indexOf('sql_') === 0;
-            var isPy  = key.indexOf('py_') === 0;
-            var targetLang = isSql ? 'sql' : (isPy ? 'python' : 'js');
-            var targetMode = isSql ? 'text/x-sql' : (isPy ? 'python' : 'javascript');
+            var isSql  = key.indexOf('sql_')  === 0;
+            var isPy   = key.indexOf('py_')   === 0;
+            var isR    = key.indexOf('r_')    === 0;
+            var isCpp  = key.indexOf('cpp_')  === 0;
+            var targetLang = isSql ? 'sql' : isPy ? 'python' : isR ? 'r' : isCpp ? 'cpp' : 'js';
+            var targetMode = isSql ? 'text/x-sql' : (isPy || isR) ? 'python' : isCpp ? 'text/x-c++src' : 'javascript';
             if (_editorLang !== targetLang) {
                 _editorLang = targetLang;
                 Q._pineEditor.setOption('mode', targetMode);
@@ -2559,9 +2911,7 @@ function initPineEditor() {
             }
             Q._pineEditor.setValue(_PINE_TEMPLATES[key]);
             Q._pineEditor.refresh();
-            // For Python templates the strategy code is after the _PY_H header;
-            // scroll to the last line so users see the unique part immediately.
-            if (isPy) {
+            if (isPy || isR || isCpp) {
                 var last = Q._pineEditor.lastLine();
                 Q._pineEditor.setCursor(last, 0);
                 Q._pineEditor.scrollIntoView({ line: last, ch: 0 }, 50);
@@ -2570,7 +2920,7 @@ function initPineEditor() {
         e.target.value = '';
     });
 
-    // Lang tab switching (JS / Python / SQL)
+    // Lang tab switching (JS / Python / R / C++ / SQL)
     var langTabs   = document.querySelectorAll('.qt-lang-tab');
     var tmplSelect = document.getElementById('qtPineTemplate');
     langTabs.forEach(function (btn) {
@@ -2579,24 +2929,27 @@ function initPineEditor() {
             if (lang === _editorLang) return;
             _editorLang = lang;
             langTabs.forEach(function (b) { b.classList.toggle('active', b === btn); });
+            var cur = Q._pineEditor.getValue();
             if (lang === 'python') {
                 Q._pineEditor.setOption('mode', 'python');
-                if (tmplSelect) tmplSelect.style.display = '';
-                if (Q._pineEditor.getValue() === _PINE_DEFAULT || Q._pineEditor.getValue() === _SQL_DEFAULT) {
+                if (cur === _PINE_DEFAULT || cur === _SQL_DEFAULT || cur === _R_DEFAULT || cur === _CPP_DEFAULT)
                     Q._pineEditor.setValue(_PYTHON_DEFAULT);
-                }
+            } else if (lang === 'r') {
+                Q._pineEditor.setOption('mode', 'python');
+                if (cur === _PINE_DEFAULT || cur === _PYTHON_DEFAULT || cur === _SQL_DEFAULT || cur === _CPP_DEFAULT)
+                    Q._pineEditor.setValue(_R_DEFAULT);
+            } else if (lang === 'cpp') {
+                Q._pineEditor.setOption('mode', 'text/x-c++src');
+                if (cur === _PINE_DEFAULT || cur === _PYTHON_DEFAULT || cur === _SQL_DEFAULT || cur === _R_DEFAULT)
+                    Q._pineEditor.setValue(_CPP_DEFAULT);
             } else if (lang === 'sql') {
                 Q._pineEditor.setOption('mode', 'text/x-sql');
-                if (tmplSelect) tmplSelect.style.display = '';
-                if (Q._pineEditor.getValue() === _PINE_DEFAULT || Q._pineEditor.getValue() === _PYTHON_DEFAULT) {
+                if (cur === _PINE_DEFAULT || cur === _PYTHON_DEFAULT || cur === _R_DEFAULT || cur === _CPP_DEFAULT)
                     Q._pineEditor.setValue(_SQL_DEFAULT);
-                }
             } else {
                 Q._pineEditor.setOption('mode', 'javascript');
-                if (tmplSelect) tmplSelect.style.display = '';
-                if (Q._pineEditor.getValue() === _PYTHON_DEFAULT || Q._pineEditor.getValue() === _SQL_DEFAULT) {
+                if (cur === _PYTHON_DEFAULT || cur === _SQL_DEFAULT || cur === _R_DEFAULT || cur === _CPP_DEFAULT)
                     Q._pineEditor.setValue(_PINE_DEFAULT);
-                }
             }
             Q._pineEditor.refresh();
         });
@@ -2620,7 +2973,9 @@ function runPineScript() {
     var code = Q._pineEditor.getValue();
 
     if (_editorLang === 'python') { runPythonScript(code); return; }
-    if (_editorLang === 'sql')    { runSQLQuery();          return; }
+    if (_editorLang === 'r')      { runRScript(code);       return; }
+    if (_editorLang === 'cpp')    { runCppScript(code);     return; }
+    if (_editorLang === 'sql')    { runSQLQuery();           return; }
 
     // "caloogy" AI mode — any line containing only "caloogy" opens the AI chat panel
     var rawLines = code.split('\n');

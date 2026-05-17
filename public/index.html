@@ -233,6 +233,7 @@
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5/mode/javascript/javascript.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5/mode/python/python.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5/mode/sql/sql.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5/mode/clike/clike.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <link rel="stylesheet" href="quant.css">
 </head>
@@ -679,6 +680,8 @@
         <div class="qt-lang-tabs">
           <button class="qt-lang-tab active" data-lang="js">JS</button>
           <button class="qt-lang-tab" data-lang="python">Python</button>
+          <button class="qt-lang-tab" data-lang="r">R</button>
+          <button class="qt-lang-tab" data-lang="cpp">C++</button>
           <button class="qt-lang-tab" data-lang="sql">SQL</button>
         </div>
         <select id="qtPineTemplate" class="qt-pine-select">
@@ -703,6 +706,15 @@
             <option value="py_arima">🐍 ARIMA Forecast</option>
             <option value="py_scipy_opt">🐍 EMA Optimization (scipy)</option>
             <option value="py_pca">🐍 PCA Factor Model</option>
+          </optgroup>
+          <optgroup label="── R ──">
+            <option value="r_ema_cross">R EMA Cross</option>
+            <option value="r_rsi_signal">R RSI Signal</option>
+            <option value="r_zscore">R Z-Score Reversion</option>
+          </optgroup>
+          <optgroup label="── C++ ──">
+            <option value="cpp_ema_cross">C++ EMA Cross</option>
+            <option value="cpp_rsi_signal">C++ RSI Signal</option>
           </optgroup>
           <optgroup label="── SQL ──">
             <option value="sql_overview">📊 DB Overview</option>

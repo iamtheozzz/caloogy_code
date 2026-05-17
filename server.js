@@ -619,6 +619,136 @@ function startServer(cfg) {
         });
     });
 
+    // ── R script runner ──────────────────────────────────────────────────────
+    app.post('/api/run-r', (req, res) => {
+        const { code, candles } = req.body;
+        if (!code) return res.status(400).json({ error: 'code required' });
+
+        const { spawn }  = require('child_process');
+        const os         = require('os');
+        const fs         = require('fs');
+        const pathMod    = require('path');
+        const tmpFile    = pathMod.join(os.tmpdir(), `caloogy_${Date.now()}_${Math.random().toString(36).slice(2)}.R`);
+
+        try { fs.writeFileSync(tmpFile, code); } catch (e) {
+            return res.status(500).json({ error: 'Failed to write temp script: ' + e.message });
+        }
+
+        const rows = (candles || []).map(c =>
+            [c.time, c.open, c.high, c.low, c.close, c.volume].join(',')
+        );
+        const csvInput = 'time,open,high,low,close,volume\n' + rows.join('\n');
+
+        let stdout = '', stderr = '';
+        const proc = spawn('Rscript', [tmpFile], {
+            env: { ...process.env, CALOOGY_DB_PATH: db.DB_PATH },
+        });
+        const timer = setTimeout(() => {
+            proc.kill();
+            fs.unlink(tmpFile, () => {});
+            res.status(400).json({ error: 'Timeout: R script took longer than 15 seconds.' });
+        }, 15000);
+
+        proc.stdin.write(csvInput);
+        proc.stdin.end();
+        proc.stdout.on('data', d => { stdout += d; });
+        proc.stderr.on('data', d => { stderr += d; });
+
+        proc.on('close', code => {
+            clearTimeout(timer);
+            fs.unlink(tmpFile, () => {});
+            if (res.headersSent) return;
+            if (code !== 0) return res.status(400).json({ error: stderr.trim() || 'Rscript exited with error.' });
+            try {
+                res.json(JSON.parse(stdout));
+            } catch {
+                res.status(400).json({ error: 'Script must end with cat(toJSON(...)). Output was:\n' + stdout.slice(0, 300) });
+            }
+        });
+
+        proc.on('error', err => {
+            clearTimeout(timer);
+            fs.unlink(tmpFile, () => {});
+            if (res.headersSent) return;
+            if (err.code === 'ENOENT') return res.status(500).json({ error: 'Rscript not found. Install R from r-project.org.' });
+            res.status(500).json({ error: err.message });
+        });
+    });
+
+    // ── C++ script runner ─────────────────────────────────────────────────────
+    app.post('/api/run-cpp', (req, res) => {
+        const { code, candles } = req.body;
+        if (!code) return res.status(400).json({ error: 'code required' });
+
+        const { spawnSync, spawn } = require('child_process');
+        const os      = require('os');
+        const fs      = require('fs');
+        const pathMod = require('path');
+        const id      = `caloogy_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const srcFile = pathMod.join(os.tmpdir(), `${id}.cpp`);
+        const binFile = pathMod.join(os.tmpdir(), id);
+
+        try { fs.writeFileSync(srcFile, code); } catch (e) {
+            return res.status(500).json({ error: 'Failed to write temp source: ' + e.message });
+        }
+
+        // Compile — try c++ (cross-platform alias), fallback to g++, then clang++
+        const compilers = ['c++', 'g++', 'clang++'];
+        let compiled = false;
+        let compileErr = '';
+        for (const cc of compilers) {
+            const r = spawnSync(cc, ['-O2', '-std=c++17', '-o', binFile, srcFile], { timeout: 20000 });
+            if (r.error && r.error.code === 'ENOENT') continue;
+            if (r.status === 0) { compiled = true; break; }
+            compileErr = (r.stderr || '').toString().trim();
+            break;
+        }
+        fs.unlink(srcFile, () => {});
+
+        if (!compiled) {
+            return res.status(400).json({
+                error: compileErr || 'No C++ compiler found. Install Xcode Command Line Tools (macOS) or g++ (Linux).',
+            });
+        }
+
+        const rows = (candles || []).map(c =>
+            [c.time, c.open, c.high, c.low, c.close, c.volume].join(',')
+        );
+        const csvInput = 'time,open,high,low,close,volume\n' + rows.join('\n');
+
+        let stdout = '', stderr = '';
+        const proc = spawn(binFile, [], {});
+        const timer = setTimeout(() => {
+            proc.kill();
+            fs.unlink(binFile, () => {});
+            res.status(400).json({ error: 'Timeout: C++ binary took longer than 10 seconds.' });
+        }, 10000);
+
+        proc.stdin.write(csvInput);
+        proc.stdin.end();
+        proc.stdout.on('data', d => { stdout += d; });
+        proc.stderr.on('data', d => { stderr += d; });
+
+        proc.on('close', code => {
+            clearTimeout(timer);
+            fs.unlink(binFile, () => {});
+            if (res.headersSent) return;
+            if (code !== 0) return res.status(400).json({ error: stderr.trim() || 'Binary exited with error.' });
+            try {
+                res.json(JSON.parse(stdout));
+            } catch {
+                res.status(400).json({ error: 'main() must write JSON to stdout. Output was:\n' + stdout.slice(0, 300) });
+            }
+        });
+
+        proc.on('error', err => {
+            clearTimeout(timer);
+            fs.unlink(binFile, () => {});
+            if (res.headersSent) return;
+            res.status(500).json({ error: err.message });
+        });
+    });
+
     // ── Yahoo Finance proxy (avoids CORS for stock data) ─────────────────────
     app.get('/api/market/yahoo', async (req, res) => {
         const { symbol, interval, range } = req.query;
