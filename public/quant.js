@@ -197,9 +197,11 @@ var _HF_SYMBOLS = {'BTCUSDT': true, 'ETHUSDT': true, 'SOLUSDT': true};
 // OKX bar param for each interval
 var _OKX_BAR = {'1H': '1H', '4H': '4H', '1D': '1D', '1W': '1W', '1min': '1m', '1s': '1s'};
 
-// Live candle SSE state
-var _liveES      = null;   // EventSource
-var _livePending = null;   // current unconfirmed candle (1s/1min only)
+// Live candle state
+var _livePending = null;
+var _liveActive  = false;
+var _liveBuffer  = {};   // { 'BTCUSDT:1s': [{time,open,high,low,close},...] }
+var _bgES        = null;
 
 function _qCacheGet(key) {
     var e = _qCache[key];
@@ -338,16 +340,6 @@ function quantFetch() {
     Q.loading = true;
     showLoading(true);
 
-    // 1s: no historical data — start empty, accumulate from Go collector via SSE
-    if (Q.bar === '1s') {
-        Q.candles = [];
-        Q.loading = false;
-        quantClearChart();
-        showLoading(true, 'Waiting for live 1s data… Open a new terminal and run: caloogy --collector');
-        _startLiveCandles();
-        return;
-    }
-
     if (isStockSymbol(Q.symbol)) { fetchYahoo(); return; }
 
     var instId = _OKX_INST[Q.symbol] || 'BTC-USDT';
@@ -368,10 +360,18 @@ function quantFetch() {
             Q.candles = candles;
             quantRenderAll();
             if (Q._onFetchDone) { var cb = Q._onFetchDone; Q._onFetchDone = null; cb(); }
-            if (Q.bar === '1min') _startLiveCandles();
+            if (Q.bar === '1min' || Q.bar === '1s') _replayBufferAndStartLive();
         })
         .catch(function (err) {
             console.warn('[Quant] OKX failed, trying Binance:', err.message);
+            if (!_BN_INTERVAL[Q.bar]) {
+                // No Binance fallback for 1s — fall back to live-only
+                Q.candles = []; Q.loading = false;
+                quantClearChart();
+                showLoading(true, 'Waiting for live data…');
+                _startLiveCandles();
+                return Promise.resolve();
+            }
             /* Fallback: Binance public API (CORS-enabled) */
             var bnUrl = 'https://api.binance.com/api/v3/klines'
                 + '?symbol=' + Q.symbol + '&interval=' + _BN_INTERVAL[Q.bar] + '&limit=300';
@@ -387,7 +387,7 @@ function quantFetch() {
                     Q.candles = candles;
                     quantRenderAll();
                     if (Q._onFetchDone) { var cb = Q._onFetchDone; Q._onFetchDone = null; cb(); }
-                    if (Q.bar === '1min') _startLiveCandles();
+                    if (Q.bar === '1min') _replayBufferAndStartLive();
                 });
         })
         .catch(function (err) {
@@ -1242,33 +1242,59 @@ function _updateHfPills() {
     }
 }
 
-function _startLiveCandles() {
-    if (_liveES) { _liveES.close(); _liveES = null; }
-    _livePending = null;
-    var sym = Q.symbol;
-    var bar = Q.bar;
-    _liveES = new EventSource('/api/live-candles');
-    _liveES.onmessage = function (e) {
+// Replay buffer candles newer than last OKX candle, then start live streaming
+function _replayBufferAndStartLive() {
+    var bufKey = Q.symbol + ':' + Q.bar;
+    var buf = _liveBuffer[bufKey] || [];
+    if (buf.length && Q.candles.length) {
+        var lastTs = Q.candles[Q.candles.length - 1].ts; // ms
+        buf.filter(function (p) { return p.time * 1000 > lastTs; }).forEach(function (p) {
+            Q.candles.push(p);
+            if (Q.series.candle) Q.series.candle.update(p);
+        });
+    }
+    if (Q.charts.candle) {
+        Q.charts.candle.timeScale().applyOptions({ barSpacing: 4, rightOffset: 8 });
+        Q.charts.candle.timeScale().scrollToRealTime();
+    }
+    _startLiveCandles();
+}
+
+function _startBgES() {
+    if (_bgES) return;
+    _bgES = new EventSource('/api/live-candles');
+    _bgES.onmessage = function (e) {
         try {
             var c = JSON.parse(e.data);
-            if (c.symbol !== sym || c.interval !== bar) return;
-            var pt = { time: Math.floor(c.ts / 1000), open: c.open, high: c.high, low: c.low, close: c.close };
+            if (c.interval !== '1s' && c.interval !== '1min') return;
+            var key = c.symbol + ':' + c.interval;
+            if (!_liveBuffer[key]) _liveBuffer[key] = [];
+            var buf = _liveBuffer[key];
+            var pt  = { time: Math.floor(c.ts / 1000), open: c.open, high: c.high, low: c.low, close: c.close };
+            var last = buf.length ? buf[buf.length - 1] : null;
+            if (last && last.time === pt.time) {
+                buf[buf.length - 1] = pt;
+            } else if (!last || pt.time > last.time) {
+                buf.push(pt);
+                if (buf.length > 600) _liveBuffer[key] = buf.slice(-300);
+            }
+            // Update chart if currently viewing this symbol+interval
+            if (!_liveActive || c.symbol !== Q.symbol || c.interval !== Q.bar) return;
             var isFirst = Q.candles.length === 0 && !_livePending;
             if (!c.confirmed) {
                 _livePending = pt;
-                if (Q.series.candle) Q.series.candle.update(pt);
             } else {
                 _livePending = null;
-                var last = Q.candles.length && Q.candles[Q.candles.length - 1];
-                if (last && last.time === pt.time) {
+                var lastC = Q.candles.length ? Q.candles[Q.candles.length - 1] : null;
+                var lastT = lastC ? (lastC.time !== undefined ? lastC.time : Math.floor(lastC.ts / 1000)) : -1;
+                if (lastC && lastT === pt.time) {
                     Q.candles[Q.candles.length - 1] = pt;
                 } else {
                     Q.candles.push(pt);
                 }
-                if (Q.series.candle) Q.series.candle.update(pt);
-                if (bar === '1s' && Q.candles.length > 500) Q.candles = Q.candles.slice(-500);
+                if (Q.bar === '1s' && Q.candles.length > 600) Q.candles = Q.candles.slice(-300);
             }
-            // First candle: hide loading overlay, set compact spacing for live view
+            if (Q.series.candle) Q.series.candle.update(pt);
             if (isFirst) {
                 showLoading(false);
                 if (Q.charts.candle) {
@@ -1278,11 +1304,16 @@ function _startLiveCandles() {
             }
         } catch {}
     };
-    _liveES.onerror = function () {};
+    _bgES.onerror = function () {};
+}
+
+function _startLiveCandles() {
+    _livePending = null;
+    _liveActive  = true;
 }
 
 function _stopLiveCandles() {
-    if (_liveES) { _liveES.close(); _liveES = null; }
+    _liveActive  = false;
     _livePending = null;
 }
 
@@ -3878,6 +3909,7 @@ window._initQuantTab = function () {
     initCharts();
     quantBindUI();
     _updateHfPills();
+    _startBgES();
     quantFetch();
     sbInit();
     initPineEditor();
