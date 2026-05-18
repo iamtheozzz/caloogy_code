@@ -8,10 +8,22 @@ Local crypto quant analysis tool — the same charting and AI code editor as [ca
 
 ## Quick Start
 
-No install required — run directly with npx:
-
 ```bash
-npx github:iamtheozzz/caloogy_code
+# 1. Install Go  →  https://go.dev/dl/  or:
+brew install go        # macOS
+# sudo apt install golang-go   # Ubuntu/Debian
+
+# 2. Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# 3. Install Caloogy
+npm install -g https://github.com/iamtheozzz/caloogy_code/archive/refs/heads/main.tar.gz
+
+# 4. Build native extensions (Go collector + Rust engine + WASM indicators)
+caloogy --build
+
+# 5. Start
+caloogy
 ```
 
 ![Terminal](assets/p1.png)
@@ -22,61 +34,45 @@ On first run you'll be prompted to choose an AI provider and paste your API key.
 
 ## Installation
 
-### One-time run (no install)
+### macOS
 
 ```bash
-npx github:iamtheozzz/caloogy_code
-```
-
-### Global install — type `caloogy` from anywhere
-
-**macOS / Linux**
-```bash
+brew install go
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 npm install -g https://github.com/iamtheozzz/caloogy_code/archive/refs/heads/main.tar.gz
+caloogy --build
 caloogy
 ```
 
-**Windows (PowerShell)**
+### Linux (Ubuntu / Debian)
+
+```bash
+sudo apt install golang-go
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+npm install -g https://github.com/iamtheozzz/caloogy_code/archive/refs/heads/main.tar.gz
+caloogy --build
+caloogy
+```
+
+### Windows (PowerShell)
+
+1. Install Go from [go.dev/dl](https://go.dev/dl/)
+2. Install Rust from [rustup.rs](https://rustup.rs/)
+3. Run:
+
 ```powershell
 npm install -g https://github.com/iamtheozzz/caloogy_code/archive/refs/heads/main.tar.gz
-caloogy
-```
-
-**Windows (Command Prompt)**
-```cmd
-npm install -g https://github.com/iamtheozzz/caloogy_code/archive/refs/heads/main.tar.gz
-caloogy
-```
-
-#### Optional: enable 1S / 1MIN live charts + high-performance backtest engine
-
-The base install works out of the box. To unlock **live 1-second and 1-minute charts** for BTC / ETH / SOL and the high-performance Rust backtest engine, install Go and Rust first, then build:
-
-```bash
-# 1. Install Go  →  https://go.dev/dl/  or:
-brew install go
-
-# 2. Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# 3. Build everything (Go collector + Rust engine + WASM indicators)
 caloogy --build
-
-# 4. Start the live data collector in a separate terminal (keep it running)
-caloogy --collector
+caloogy
 ```
 
-Once the collector is running, select BTC / ETH / SOL and click **1S** or **1MIN** — candles stream in automatically.
+**What `caloogy --build` compiles:**
 
-**What each module unlocks:**
-
-| Module | Requires | Unlocks |
-|--------|----------|---------|
-| Go live data collector | [Go 1.21+](https://go.dev/dl/) | 1S and 1MIN live charts for BTC / ETH / SOL |
-| Rust backtest engine | [Rust](https://rustup.rs/) | 10–50× faster backtests, walk-forward optimization |
-| WASM indicators | Rust + `wasm-pack` | Faster in-browser indicator calculations |
-
-All three are **optional** — the app runs fully without them.
+| Module | Unlocks |
+|--------|---------|
+| Go live data collector | 1S and 1MIN live charts for BTC / ETH / SOL |
+| Rust backtest engine | 10–50× faster backtests, walk-forward optimization |
+| WASM indicators | Faster in-browser indicator calculations |
 
 ### Uninstall
 
@@ -135,8 +131,7 @@ caloogy -r
 | `--reconfigure`, `-r` | Re-run setup to change provider, API key, or email |
 | `--alerts`, `-a` | Open the alert manager in the terminal |
 | `--chat`, `-c` | Start the terminal AI agent (manage alerts + export CSV with natural language) |
-| `--build`, `-b` | Compile optional native extensions (Go collector, Rust engine, WASM indicators) |
-| `--collector` | Start the Go live data collector (required for 1S / 1MIN charts) |
+| `--build`, `-b` | Compile native extensions (Go collector, Rust engine, WASM indicators) |
 
 ---
 
@@ -565,7 +560,7 @@ export PATH="$(npm prefix -g)/bin:$PATH"
 
 **Browser doesn't open automatically** — navigate manually to the URL printed in the terminal (e.g. `http://localhost:3000`).
 
-**1S / 1MIN chart shows "Waiting for live data…"** — see [Optional: enable 1S / 1MIN live charts](#optional-enable-1s--1min-live-charts--high-performance-backtest-engine) in the Installation section.
+**1S / 1MIN chart shows "Waiting for live data…"** — make sure you ran `caloogy --build` (requires Go and Rust). If you haven't installed them yet, follow the [Installation](#installation) steps and run `caloogy --build` once.
 
 ---
 
