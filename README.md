@@ -48,25 +48,35 @@ npm install -g https://github.com/iamtheozzz/caloogy_code/archive/refs/heads/mai
 caloogy
 ```
 
-#### Optional: build native extensions
+#### Optional: enable 1S / 1MIN live charts + high-performance backtest engine
 
-After the global install, run this once to compile the optional performance modules (Go data collector, Rust backtest engine, WASM indicators):
+The base install works out of the box. To unlock **live 1-second and 1-minute charts** for BTC / ETH / SOL and the high-performance Rust backtest engine, install Go and Rust first, then build:
 
 ```bash
+# 1. Install Go  →  https://go.dev/dl/  or:
+brew install go
+
+# 2. Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# 3. Build everything (Go collector + Rust engine + WASM indicators)
 caloogy --build
-# or equivalently
-bash scripts/build.sh
+
+# 4. Start the live data collector in a separate terminal (keep it running)
+./collector/caloogy-collector
 ```
 
-**Prerequisites for each module:**
+Once the collector is running, select BTC / ETH / SOL and click **1S** or **1MIN** — candles stream in automatically.
 
-| Module | Requires |
-|--------|----------|
-| Go live data collector | [Go 1.21+](https://go.dev/dl/) |
-| Rust backtest engine | [Rust](https://rustup.rs/) + Python 3 (`pip3 install maturin` auto-attempted) |
-| WASM indicators | Rust + `wasm-pack` (`cargo install wasm-pack` auto-attempted) |
+**What each module unlocks:**
 
-All three are **optional** — the app runs without them, falling back to the built-in implementations. Install only what you want.
+| Module | Requires | Unlocks |
+|--------|----------|---------|
+| Go live data collector | [Go 1.21+](https://go.dev/dl/) | 1S and 1MIN live charts for BTC / ETH / SOL |
+| Rust backtest engine | [Rust](https://rustup.rs/) | 10–50× faster backtests, walk-forward optimization |
+| WASM indicators | Rust + `wasm-pack` | Faster in-browser indicator calculations |
+
+All three are **optional** — the app runs fully without them.
 
 ### Uninstall
 
@@ -554,19 +564,7 @@ export PATH="$(npm prefix -g)/bin:$PATH"
 
 **Browser doesn't open automatically** — navigate manually to the URL printed in the terminal (e.g. `http://localhost:3000`).
 
-**1S / 1MIN chart shows "Waiting for live data…"** — the high-frequency chart requires the Go collector to be built and running. Follow these steps:
-
-1. Install Go ([go.dev/dl](https://go.dev/dl/) or `brew install go`) and Rust (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
-2. Build the extensions:
-   ```bash
-   caloogy --build
-   ```
-3. Start the collector in a separate terminal (keep it running alongside `caloogy`):
-   ```bash
-   ./collector/caloogy-collector
-   ```
-
-Once the collector is running, switch to any BTC / ETH / SOL chart and select **1S** or **1MIN** — live candles will start appearing automatically.
+**1S / 1MIN chart shows "Waiting for live data…"** — see [Optional: enable 1S / 1MIN live charts](#optional-enable-1s--1min-live-charts--high-performance-backtest-engine) in the Installation section.
 
 ---
 
