@@ -21,10 +21,11 @@ import (
 // ──────────────────────────────────────────────
 
 const (
-	okxWSURL    = "wss://ws.okx.com:8443/ws/v5/public"
-	sockPath    = "/tmp/caloogy_collector.sock"
-	pingEvery   = 20 * time.Second
-	reconnectIn = 3 * time.Second
+	okxWSPublic   = "wss://ws.okx.com:8443/ws/v5/public"
+	okxWSBusiness = "wss://ws.okx.com:8443/ws/v5/business"
+	sockPath      = "/tmp/caloogy_collector.sock"
+	pingEvery     = 20 * time.Second
+	reconnectIn   = 3 * time.Second
 )
 
 // symbols for standard intervals (1H/4H/1D).
@@ -190,7 +191,7 @@ type okxMsg struct {
 // Single WebSocket worker
 // ──────────────────────────────────────────────
 
-func runWorker(ctx context.Context, hub *Hub, sym, instId, interval, channel string, emitLive bool) {
+func runWorker(ctx context.Context, hub *Hub, sym, instId, interval, channel, wsURL string, emitLive bool) {
 	tag := fmt.Sprintf("[%s/%s]", sym, interval)
 
 	for {
@@ -200,7 +201,7 @@ func runWorker(ctx context.Context, hub *Hub, sym, instId, interval, channel str
 		default:
 		}
 
-		if err := connectAndStream(ctx, hub, sym, instId, interval, channel, tag, emitLive); err != nil {
+		if err := connectAndStream(ctx, hub, sym, instId, interval, channel, tag, wsURL, emitLive); err != nil {
 			log.Printf("%s disconnected: %v — reconnecting in %s", tag, err, reconnectIn)
 		}
 
@@ -215,11 +216,11 @@ func runWorker(ctx context.Context, hub *Hub, sym, instId, interval, channel str
 func connectAndStream(
 	ctx context.Context,
 	hub *Hub,
-	sym, instId, interval, channel, tag string,
+	sym, instId, interval, channel, tag, wsURL string,
 	emitLive bool,
 ) error {
 	dialer := websocket.DefaultDialer
-	conn, _, err := dialer.DialContext(ctx, okxWSURL, nil)
+	conn, _, err := dialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
@@ -351,18 +352,18 @@ func main() {
 			wg.Add(1)
 			go func(sym struct{ name, instId string }, iv struct{ label, channel string }) {
 				defer wg.Done()
-				runWorker(ctx, hub, sym.name, sym.instId, iv.label, iv.channel, false)
+				runWorker(ctx, hub, sym.name, sym.instId, iv.label, iv.channel, okxWSPublic, false)
 			}(sym, iv)
 		}
 	}
 
-	// High-frequency intervals (1s/1min) — BTC/ETH/SOL only, emit live updates too.
+	// High-frequency intervals (1s/1min) — BTC/ETH/SOL only, business endpoint required.
 	for _, sym := range liveSymbols {
 		for _, iv := range liveIntervals {
 			wg.Add(1)
 			go func(sym struct{ name, instId string }, iv struct{ label, channel string }) {
 				defer wg.Done()
-				runWorker(ctx, hub, sym.name, sym.instId, iv.label, iv.channel, true)
+				runWorker(ctx, hub, sym.name, sym.instId, iv.label, iv.channel, okxWSBusiness, true)
 			}(sym, iv)
 		}
 	}
