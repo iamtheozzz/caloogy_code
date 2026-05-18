@@ -546,6 +546,16 @@ async function main() {
     spin.stop(`  ${K2}✓${RESET} Running at ${BOLD}${url}${RESET}  ${DIM}(Ctrl+C to stop)${RESET}`);
     console.log(`  ${DIM}${cfg.provider}${info}  ·  caloogy --reconfigure to change settings${RESET}\n`);
 
+    // Auto-start Go collector in background if binary exists
+    const collectorBin = path.join(PKG_ROOT, 'collector', 'caloogy-collector');
+    if (fs.existsSync(collectorBin)) {
+        const { spawn } = require('child_process');
+        const col = spawn(collectorBin, [], { stdio: 'ignore' });
+        col.on('error', () => {});
+        console.log(`  ${DIM}Live collector started (pid ${col.pid}) — 1S/1MIN charts enabled${RESET}\n`);
+        process.on('exit', () => { try { col.kill(); } catch {} });
+    }
+
     try { const open = (await import('open')).default; await open(url); } catch {}
 }
 
