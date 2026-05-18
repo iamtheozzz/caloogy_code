@@ -435,6 +435,47 @@ function buildExtensions(pkgRoot) {
     spawnSync('bash', [script], { stdio: 'inherit', shell: false });
 }
 
+function hasCmd(cmd) {
+    const { spawnSync } = require('child_process');
+    return !spawnSync(cmd, ['--version'], { stdio: 'ignore', shell: false }).error;
+}
+
+async function maybeOfferBuild(pkgRoot) {
+    const flagFile = path.join(os.homedir(), '.caloogy', 'build_prompted');
+    if (fs.existsSync(flagFile)) return;
+
+    const hasGo   = hasCmd('go')    && fs.existsSync(path.join(pkgRoot, 'collector', 'go.mod'));
+    const hasRust = hasCmd('cargo') && fs.existsSync(path.join(pkgRoot, 'engine', 'Cargo.toml'));
+    if (!hasGo && !hasRust) return;
+
+    const detected = [hasGo && 'Go', hasRust && 'Rust'].filter(Boolean).join(' + ');
+    console.log(`\n  ${K3}Optional extensions detected${RESET} (${detected})`);
+    console.log(`  ${DIM}These unlock the live data collector and high-performance backtest engine.${RESET}\n`);
+    console.log(`    ${BOLD}1${RESET}  Build now        ${DIM}(takes 1–3 min, server starts after)${RESET}`);
+    console.log(`    ${BOLD}2${RESET}  Build in background  ${DIM}(server starts immediately)${RESET}`);
+    console.log(`    ${BOLD}3${RESET}  Skip             ${DIM}(won't ask again)${RESET}\n`);
+
+    const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise(resolve => iface.question(`  Choice [1/2/3]: `, resolve));
+    iface.close();
+
+    fs.mkdirSync(path.dirname(flagFile), { recursive: true });
+    fs.writeFileSync(flagFile, '1');
+
+    const choice = answer.trim();
+    if (choice === '1') {
+        buildExtensions(pkgRoot);
+    } else if (choice === '2') {
+        const { spawn } = require('child_process');
+        const script = path.join(pkgRoot, 'scripts', 'build.sh');
+        const child = spawn('bash', [script], { stdio: 'ignore', detached: true });
+        child.unref();
+        console.log(`\n  ${DIM}Building in background — check output with: bash scripts/build.sh${RESET}\n`);
+    } else {
+        console.log(`\n  ${DIM}Skipped. Run ${RESET}${BOLD}caloogy --build${RESET}${DIM} any time to build later.${RESET}\n`);
+    }
+}
+
 async function main() {
     // First-run native setup: runs once after `npm install -g`
     // __dirname is always the absolute bin/ path, independent of CWD
@@ -471,6 +512,8 @@ async function main() {
     }
 
     await showBanner();
+
+    if (!reconfig) await maybeOfferBuild(PKG_ROOT);
 
     let cfg = reconfig ? null : readConfig();
     if (!cfg) cfg = await setup();
