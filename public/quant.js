@@ -338,12 +338,12 @@ function quantFetch() {
     Q.loading = true;
     showLoading(true);
 
-    // 1s: no historical data available — start with empty chart, live only
+    // 1s: no historical data — start empty, accumulate from Go collector via SSE
     if (Q.bar === '1s') {
         Q.candles = [];
         Q.loading = false;
-        showLoading(false);
-        quantRenderAll();
+        quantClearChart();
+        showLoading(true, 'Waiting for live data… (requires Go collector)');
         _startLiveCandles();
         return;
     }
@@ -1073,9 +1073,23 @@ function runBacktest(candles, strat) {
 /* ── Render ─────────────────────────────────────────────────────────── */
 function toTime(ts_ms) { return Math.floor(ts_ms / 1000); }
 
+function quantClearChart() {
+    var empty = [];
+    Q.series.candle.setData(empty);
+    Q.series.volume.setData(empty);
+    Q.series.sma.setData(empty);
+    Q.series.ema.setData(empty);
+    Q.series.fastEma.setData(empty);
+    Q.series.slowEma.setData(empty);
+    Q.series.bbUpper.setData(empty);
+    Q.series.bbMiddle.setData(empty);
+    Q.series.bbLower.setData(empty);
+    if (Q.charts.candle) Q.charts.candle.timeScale().fitContent();
+}
+
 function quantRenderAll(bt) {
     var c = Q.candles;
-    if (!c || c.length === 0) return;
+    if (!c || c.length === 0) { quantClearChart(); return; }
     showLoading(false);
     // Clear user series when data is refreshed (symbol/bar change)
     if (Q.userSeries.length > 0 && Q.charts.candle) {
@@ -1237,6 +1251,7 @@ function _startLiveCandles() {
             var c = JSON.parse(e.data);
             if (c.symbol !== sym || c.interval !== bar) return;
             var pt = { time: Math.floor(c.ts / 1000), open: c.open, high: c.high, low: c.low, close: c.close };
+            var isFirst = Q.candles.length === 0 && !_livePending;
             if (!c.confirmed) {
                 _livePending = pt;
                 if (Q.series.candle) Q.series.candle.update(pt);
@@ -1250,6 +1265,11 @@ function _startLiveCandles() {
                 }
                 if (Q.series.candle) Q.series.candle.update(pt);
                 if (bar === '1s' && Q.candles.length > 500) Q.candles = Q.candles.slice(-500);
+            }
+            // First candle: hide loading overlay and fit time scale
+            if (isFirst) {
+                showLoading(false);
+                if (Q.charts.candle) Q.charts.candle.timeScale().fitContent();
             }
         } catch {}
     };
