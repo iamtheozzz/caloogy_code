@@ -63,7 +63,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 caloogy --build
 
 # 4. Start the live data collector in a separate terminal (keep it running)
-./collector/caloogy-collector
+caloogy --collector
 ```
 
 Once the collector is running, select BTC / ETH / SOL and click **1S** or **1MIN** — candles stream in automatically.
@@ -136,6 +136,7 @@ caloogy -r
 | `--alerts`, `-a` | Open the alert manager in the terminal |
 | `--chat`, `-c` | Start the terminal AI agent (manage alerts + export CSV with natural language) |
 | `--build`, `-b` | Compile optional native extensions (Go collector, Rust engine, WASM indicators) |
+| `--collector` | Start the Go live data collector (required for 1S / 1MIN charts) |
 
 ---
 

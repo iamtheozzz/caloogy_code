@@ -494,13 +494,28 @@ async function main() {
         }
     }
 
-    const args      = process.argv.slice(2);
-    const reconfig  = args.includes('--reconfigure') || args.includes('-r');
-    const alertMode = args.includes('--alerts')      || args.includes('-a');
-    const chatMode  = args.includes('--chat')        || args.includes('-c');
-    const buildMode = args.includes('--build')       || args.includes('-b');
+    const args           = process.argv.slice(2);
+    const reconfig       = args.includes('--reconfigure') || args.includes('-r');
+    const alertMode      = args.includes('--alerts')      || args.includes('-a');
+    const chatMode       = args.includes('--chat')        || args.includes('-c');
+    const buildMode      = args.includes('--build')       || args.includes('-b');
+    const collectorMode  = args.includes('--collector');
 
     if (buildMode) { buildExtensions(PKG_ROOT); return; }
+
+    if (collectorMode) {
+        const { spawnSync } = require('child_process');
+        const bin = path.join(PKG_ROOT, 'collector', 'caloogy-collector');
+        if (!fs.existsSync(bin)) {
+            console.log(`\n  ${'\x1b[31m'}Collector binary not found.${RESET}`);
+            console.log(`  Run ${BOLD}caloogy --build${RESET} first (requires Go — brew install go).\n`);
+            process.exit(1);
+        }
+        console.log(`\n  ${K2}▸${RESET} Starting Go live data collector…`);
+        console.log(`  ${DIM}Press Ctrl+C to stop.${RESET}\n`);
+        spawnSync(bin, [], { stdio: 'inherit' });
+        return;
+    }
 
     if (alertMode) { await alertsCLI(); return; }
 

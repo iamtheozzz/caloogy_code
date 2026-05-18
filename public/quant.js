@@ -343,7 +343,7 @@ function quantFetch() {
         Q.candles = [];
         Q.loading = false;
         quantClearChart();
-        showLoading(true, 'Waiting for live 1s data… Run: caloogy --build, then ./collector/caloogy-collector');
+        showLoading(true, 'Waiting for live 1s data… Open a new terminal and run: caloogy --collector');
         _startLiveCandles();
         return;
     }
