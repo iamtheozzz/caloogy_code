@@ -202,6 +202,7 @@ var _livePending = null;
 var _liveActive  = false;
 var _liveBuffer  = {};   // { 'BTCUSDT:1s': [{time,open,high,low,close},...] }
 var _bgES        = null;
+var _fetchSeq    = 0;    // incremented on every fetch; async callbacks check this to discard stale responses
 
 function _qCacheGet(key) {
     var e = _qCache[key];
@@ -328,12 +329,19 @@ function _parseBinance(data) {
 
 function quantFetch() {
     if (Q.loading) return;
+    _stopLiveCandles();          // always reset live state before any fetch
+    Q.candles = [];
+    quantClearChart();           // immediately clear all series so no stale data shows
+
     var key = Q.symbol + '_' + Q.bar;
+    var seq = ++_fetchSeq;       // generation stamp — stale responses check this
+
     var cached = _qCacheGet(key);
     if (cached) {
         Q.candles = cached;
         quantRenderAll();
         if (Q._onFetchDone) { var cb = Q._onFetchDone; Q._onFetchDone = null; cb(); }
+        if (Q.bar === '1min' || Q.bar === '1s') _replayBufferAndStartLive();
         return;
     }
 
@@ -353,6 +361,7 @@ function quantFetch() {
             return r.json();
         })
         .then(function (j) {
+            if (seq !== _fetchSeq) return;   // stale — a newer fetch already ran
             if (j.code !== '0' || !Array.isArray(j.data) || j.data.length < 5)
                 throw new Error('okx empty');
             var candles = _parseOkx(j.data);
@@ -363,11 +372,10 @@ function quantFetch() {
             if (Q.bar === '1min' || Q.bar === '1s') _replayBufferAndStartLive();
         })
         .catch(function (err) {
+            if (seq !== _fetchSeq) return;
             console.warn('[Quant] OKX failed, trying Binance:', err.message);
             if (!_BN_INTERVAL[Q.bar]) {
-                // No Binance fallback for 1s — fall back to live-only
-                Q.candles = []; Q.loading = false;
-                quantClearChart();
+                Q.loading = false;
                 showLoading(true, 'Waiting for live data…');
                 _startLiveCandles();
                 return Promise.resolve();
@@ -381,6 +389,7 @@ function quantFetch() {
                     return r.json();
                 })
                 .then(function (data) {
+                    if (seq !== _fetchSeq) return;
                     if (!Array.isArray(data) || data.length < 5) throw new Error('binance empty');
                     var candles = _parseBinance(data);
                     _qCacheSet(key, candles);
@@ -391,6 +400,7 @@ function quantFetch() {
                 });
         })
         .catch(function (err) {
+            if (seq !== _fetchSeq) return;
             console.error('[Quant] all sources failed:', err);
             showLoading(true, 'Failed to load data');
             Q._onFetchDone = null;
@@ -1084,6 +1094,13 @@ function quantClearChart() {
     Q.series.bbUpper.setData(empty);
     Q.series.bbMiddle.setData(empty);
     Q.series.bbLower.setData(empty);
+    if (Q.series.rsi)      Q.series.rsi.setData(empty);
+    if (Q.series.ob)       Q.series.ob.setData(empty);
+    if (Q.series.os)       Q.series.os.setData(empty);
+    if (Q.series.macdLine) Q.series.macdLine.setData(empty);
+    if (Q.series.macdSig)  Q.series.macdSig.setData(empty);
+    if (Q.series.macdHist) Q.series.macdHist.setData(empty);
+    if (Q.series.equity)   Q.series.equity.setData(empty);
     if (Q.charts.candle && Q.bar !== '1s' && Q.bar !== '1min') {
         Q.charts.candle.timeScale().fitContent();
     }
