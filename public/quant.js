@@ -332,6 +332,7 @@ function quantFetch() {
     _stopLiveCandles();          // always reset live state before any fetch
     Q.candles = [];
     quantClearChart();           // immediately clear all series so no stale data shows
+    if (Q.bar === '1s' || Q.bar === '1min') { _enterHfMode(); } else { _exitHfMode(); }
 
     var key = Q.symbol + '_' + Q.bar;
     var seq = ++_fetchSeq;       // generation stamp — stale responses check this
@@ -1182,67 +1183,112 @@ function quantRenderAll(bt) {
     Q.series.fastEma.setData(fData);
     Q.series.slowEma.setData(sData);
 
-    // Buy/sell markers
-    var markers = [];
-    if (bt) {
-        for (var i = 0; i < bt.buyX.length; i++) {
-            markers.push({ time: bt.buyX[i], position: 'belowBar', color: '#0d9488', shape: 'arrowUp', text: 'B' });
-        }
-        for (var i = 0; i < bt.sellX.length; i++) {
-            markers.push({ time: bt.sellX[i], position: 'aboveBar', color: '#ef4444', shape: 'arrowDown', text: 'S' });
-        }
-        markers.sort(function (a, b) { return a.time - b.time; });
-    }
-    Q.series.candle.setMarkers(markers);
+    var isHF = (Q.bar === '1s' || Q.bar === '1min');
 
-    // RSI
-    var ob = parseInt(document.getElementById('quantRsiOb').value);
-    var os = parseInt(document.getElementById('quantRsiOs').value);
-    var rsiVals = calcRsi(closes, 14);
-    var rsiData = [], obData = [], osData = [];
-    for (var i = 0; i < c.length; i++) {
-        var t = toTime(c[i].ts);
-        if (rsiVals[i] !== null) rsiData.push({ time: t, value: rsiVals[i] });
-        obData.push({ time: t, value: ob });
-        osData.push({ time: t, value: os });
-    }
-    Q.series.rsi.setData(rsiData);
-    Q.series.ob.setData(obData);
-    Q.series.os.setData(osData);
+    // Buy/sell markers (disabled for HF — backtest doesn't run on 1s/1min)
+    Q.series.candle.setMarkers(!isHF && bt ? (function () {
+        var m = [];
+        for (var i = 0; i < bt.buyX.length; i++)
+            m.push({ time: bt.buyX[i], position: 'belowBar', color: '#0d9488', shape: 'arrowUp', text: 'B' });
+        for (var i = 0; i < bt.sellX.length; i++)
+            m.push({ time: bt.sellX[i], position: 'aboveBar', color: '#ef4444', shape: 'arrowDown', text: 'S' });
+        m.sort(function (a, b) { return a.time - b.time; });
+        return m;
+    })() : []);
 
-    // MACD (lazy — only render when visible)
-    if (Q.charts.macd && !document.getElementById('quantMacdDiv').classList.contains('quant-hidden')) {
-        var md = calcMacd(closes, 12, 26, 9);
-        var mlData = [], msData = [], mhData = [];
+    if (!isHF) {
+        // RSI
+        var ob = parseInt(document.getElementById('quantRsiOb').value);
+        var os = parseInt(document.getElementById('quantRsiOs').value);
+        var rsiVals = calcRsi(closes, 14);
+        var rsiData = [], obData = [], osData = [];
         for (var i = 0; i < c.length; i++) {
             var t = toTime(c[i].ts);
-            if (md.macd[i] !== null) mlData.push({ time: t, value: md.macd[i] });
-            if (md.signal[i] !== null) {
-                msData.push({ time: t, value: md.signal[i] });
-                var hist = md.macd[i] - md.signal[i];
-                mhData.push({ time: t, value: hist,
-                    color: hist >= 0 ? 'rgba(13,148,136,0.55)' : 'rgba(239,68,68,0.55)' });
-            }
+            if (rsiVals[i] !== null) rsiData.push({ time: t, value: rsiVals[i] });
+            obData.push({ time: t, value: ob });
+            osData.push({ time: t, value: os });
         }
-        Q.series.macdLine.setData(mlData);
-        Q.series.macdSig.setData(msData);
-        Q.series.macdHist.setData(mhData);
-        Q.charts.macd.timeScale().fitContent();
-    }
+        Q.series.rsi.setData(rsiData);
+        Q.series.ob.setData(obData);
+        Q.series.os.setData(osData);
 
-    // Equity curve
-    if (bt && bt.equityCurve.length > 0) {
-        document.getElementById('quantEquityDiv').classList.remove('quant-hidden');
-        Q.series.equity.setData(bt.equityCurve);
-        Q.charts.equity.timeScale().fitContent();
+        // MACD (lazy — only render when visible)
+        if (Q.charts.macd && !document.getElementById('quantMacdDiv').classList.contains('quant-hidden')) {
+            var md = calcMacd(closes, 12, 26, 9);
+            var mlData = [], msData = [], mhData = [];
+            for (var i = 0; i < c.length; i++) {
+                var t = toTime(c[i].ts);
+                if (md.macd[i] !== null) mlData.push({ time: t, value: md.macd[i] });
+                if (md.signal[i] !== null) {
+                    msData.push({ time: t, value: md.signal[i] });
+                    var hist = md.macd[i] - md.signal[i];
+                    mhData.push({ time: t, value: hist,
+                        color: hist >= 0 ? 'rgba(13,148,136,0.55)' : 'rgba(239,68,68,0.55)' });
+                }
+            }
+            Q.series.macdLine.setData(mlData);
+            Q.series.macdSig.setData(msData);
+            Q.series.macdHist.setData(mhData);
+            Q.charts.macd.timeScale().fitContent();
+        }
+
+        // Equity curve
+        if (bt && bt.equityCurve.length > 0) {
+            document.getElementById('quantEquityDiv').classList.remove('quant-hidden');
+            Q.series.equity.setData(bt.equityCurve);
+            Q.charts.equity.timeScale().fitContent();
+        }
     }
 
     // Reset price scale so switching assets repositions the y-axis
     Q.charts.candle.priceScale('right').applyOptions({ autoScale: true });
-    Q.charts.rsi.priceScale('right').applyOptions({ autoScale: true });
+    if (!isHF) Q.charts.rsi.priceScale('right').applyOptions({ autoScale: true });
 
     Q.charts.candle.timeScale().fitContent();
-    Q.charts.rsi.timeScale().fitContent();
+    if (!isHF) Q.charts.rsi.timeScale().fitContent();
+}
+
+/* ── HF mode (1s / 1min): hide all subcharts ────────────────────────── */
+var _hfSavedState = null;
+
+function _enterHfMode() {
+    if (_hfSavedState) return;
+    var rsiDiv    = document.getElementById('quantRsiDiv');
+    var macdDiv   = document.getElementById('quantMacdDiv');
+    var equityDiv = document.getElementById('quantEquityDiv');
+    var rsiBtn    = document.getElementById('quantRsiToggle');
+    var macdBtn   = document.getElementById('quantMacdToggle');
+    var qMain     = document.getElementById('quantMain');
+    _hfSavedState = {
+        rsi:    rsiDiv    && !rsiDiv.classList.contains('quant-hidden'),
+        macd:   macdDiv   && !macdDiv.classList.contains('quant-hidden'),
+        equity: equityDiv && !equityDiv.classList.contains('quant-hidden'),
+        dual:   qMain     && qMain.classList.contains('quant-dual'),
+    };
+    if (rsiDiv)    rsiDiv.classList.add('quant-hidden');
+    if (macdDiv)   macdDiv.classList.add('quant-hidden');
+    if (equityDiv) equityDiv.classList.add('quant-hidden');
+    if (rsiBtn)    rsiBtn.classList.remove('active');
+    if (macdBtn)   macdBtn.classList.remove('active');
+    if (qMain)     qMain.classList.remove('quant-dual');
+}
+
+function _exitHfMode() {
+    if (!_hfSavedState) return;
+    var s = _hfSavedState;
+    _hfSavedState = null;
+    var rsiDiv    = document.getElementById('quantRsiDiv');
+    var macdDiv   = document.getElementById('quantMacdDiv');
+    var equityDiv = document.getElementById('quantEquityDiv');
+    var rsiBtn    = document.getElementById('quantRsiToggle');
+    var macdBtn   = document.getElementById('quantMacdToggle');
+    var qMain     = document.getElementById('quantMain');
+    if (rsiDiv)    rsiDiv.classList.toggle('quant-hidden', !s.rsi);
+    if (macdDiv)   macdDiv.classList.toggle('quant-hidden', !s.macd);
+    if (equityDiv) equityDiv.classList.toggle('quant-hidden', !s.equity);
+    if (rsiBtn)    rsiBtn.classList.toggle('active', s.rsi);
+    if (macdBtn)   macdBtn.classList.toggle('active', s.macd);
+    if (qMain)     qMain.classList.toggle('quant-dual', s.dual);
 }
 
 /* ── UI binding ─────────────────────────────────────────────────────── */
