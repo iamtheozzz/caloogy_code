@@ -1,0 +1,17 @@
+[package]
+name = "caloogy_engine"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "caloogy_engine"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.21", features = ["extension-module"] }
+rayon = "1.9"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3

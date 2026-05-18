@@ -930,6 +930,135 @@ function startServer(cfg) {
     try { db.getDB(); } catch (e) { console.warn('[DB] Init warning:', e.message); }
     installPythonUtils();
 
+    // ── Live-candles SSE (fed by Go collector or future WS sources) ──────────
+    const liveClients = new Set();
+
+    app.get('/api/live-candles', (req, res) => {
+        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+        liveClients.add(res);
+        req.on('close', () => liveClients.delete(res));
+    });
+
+    function broadcastLive(candleObj) {
+        const line = `data: ${JSON.stringify(candleObj)}\n\n`;
+        liveClients.forEach(r => { try { r.write(line); } catch {} });
+    }
+
+    // ── Go collector socket bridge ────────────────────────────────────────────
+    const COLLECTOR_SOCK = '/tmp/caloogy_collector.sock';
+    let _collectorTimer = null;
+
+    function connectCollector() {
+        const sock = net.createConnection(COLLECTOR_SOCK);
+        let buf = '';
+        sock.on('connect', () => console.log('[collector] Go bridge connected'));
+        sock.on('data', chunk => {
+            buf += chunk.toString();
+            const lines = buf.split('\n');
+            buf = lines.pop();
+            lines.filter(Boolean).forEach(line => {
+                try {
+                    const bar = JSON.parse(line);
+                    // write to DuckDB (non-blocking)
+                    db.upsertCandles(bar.symbol, bar.interval, [{
+                        ts: bar.ts, open: bar.open, high: bar.high,
+                        low: bar.low, close: bar.close, volume: bar.volume,
+                    }], 'live').catch(() => {});
+                    // push to browser SSE clients
+                    broadcastLive(bar);
+                } catch {}
+            });
+        });
+        const retry = () => {
+            clearTimeout(_collectorTimer);
+            _collectorTimer = setTimeout(connectCollector, 5000);
+        };
+        sock.on('error', retry);
+        sock.on('close', retry);
+    }
+    connectCollector();
+
+    // ── Python backtest worker ────────────────────────────────────────────────
+    let _worker        = null;
+    let _workerReady   = false;
+    let _workerBuf     = '';
+    const _workerCbs   = new Map(); // _id → callback(msg)
+    let _workerCbId    = 0;
+
+    function startWorker() {
+        const workerPath = path.join(__dirname, 'lib', 'worker.py');
+        if (!require('fs').existsSync(workerPath)) return;
+
+        // Add engine/ to PYTHONPATH so `import caloogy_engine` finds the .so
+        const engineDir = path.join(__dirname, 'engine');
+        const pyPath    = [engineDir, process.env.PYTHONPATH || ''].filter(Boolean).join(':');
+
+        _worker = require('child_process').spawn(
+            'python3', ['-u', workerPath],
+            { env: { ...process.env, CALOOGY_DB_PATH: db.DB_PATH, PYTHONPATH: pyPath } }
+        );
+        _workerReady = false;
+        _workerBuf   = '';
+
+        _worker.stdout.on('data', d => {
+            _workerBuf += d.toString();
+            const lines = _workerBuf.split('\n');
+            _workerBuf = lines.pop();
+            lines.filter(Boolean).forEach(line => {
+                try {
+                    const msg = JSON.parse(line);
+                    if (msg.type === 'ready') { _workerReady = true; return; }
+                    const cb = _workerCbs.get(msg._id);
+                    if (cb) cb(msg);
+                } catch {}
+            });
+        });
+        _worker.stderr.on('data', d => console.error('[worker]', d.toString().trim()));
+        _worker.on('close', () => {
+            _workerReady = false;
+            // reject any pending requests
+            _workerCbs.forEach((cb) => cb({ type: 'error', msg: 'Worker crashed — restarting.' }));
+            _workerCbs.clear();
+            console.log('[worker] restarting in 3s…');
+            setTimeout(startWorker, 3000);
+        });
+    }
+    startWorker();
+
+    // ── /api/backtest  (SSE, streamed from Python worker) ─────────────────────
+    app.post('/api/backtest', (req, res) => {
+        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
+        const sendSSE = obj => { try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {} };
+
+        if (!_worker || !_workerReady) {
+            sendSSE({ type: 'error', msg: 'Backtest engine not ready. Is Python installed?' });
+            return res.end();
+        }
+
+        const id  = ++_workerCbId;
+        const cmd = { ...req.body, cmd: 'backtest', _id: id };
+
+        _workerCbs.set(id, msg => {
+            sendSSE(msg);
+            if (msg.type === 'result' || msg.type === 'error') {
+                _workerCbs.delete(id);
+                res.end();
+            }
+        });
+
+        try { _worker.stdin.write(JSON.stringify(cmd) + '\n'); }
+        catch (e) { sendSSE({ type: 'error', msg: e.message }); res.end(); }
+
+        req.on('close', () => _workerCbs.delete(id));
+    });
+
     let server;
     return new Promise((resolve, reject) => {
         findFreePort(3000).then(port => {

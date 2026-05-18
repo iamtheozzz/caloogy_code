@@ -375,8 +375,24 @@ function quantFetch() {
         .finally(function () { Q.loading = false; });
 }
 
+/* ── WASM indicator acceleration (optional) ─────────────────────────── */
+var _W = null; // WASM module, null until loaded
+(function () {
+    if (typeof WebAssembly === 'undefined') return;
+    import('/wasm/caloogy_wasm.js')
+        .then(function (m) { return m.default().then(function () { _W = m; }); })
+        .catch(function () { /* WASM not available, JS fallback stays */ });
+})();
+// Helper: convert Float64Array from WASM (NaN→null) to JS Array<number|null>
+function _wf(arr) {
+    var out = new Array(arr.length);
+    for (var i = 0; i < arr.length; i++) out[i] = isNaN(arr[i]) ? null : arr[i];
+    return out;
+}
+
 /* ── Indicator math ─────────────────────────────────────────────────── */
 function sma(arr, n) {
+    if (_W) return _wf(_W.sma(Float64Array.from(arr.map(function(v){return v==null?NaN:v;})), n));
     return arr.map(function (_, i) {
         if (i < n - 1) return null;
         var s = 0;
@@ -386,6 +402,7 @@ function sma(arr, n) {
 }
 
 function ema(arr, n) {
+    if (_W) return _wf(_W.ema(Float64Array.from(arr.map(function(v){return v==null?NaN:v;})), n));
     var k = 2 / (n + 1);
     var out = new Array(arr.length).fill(null);
     var prev = null;
@@ -404,6 +421,7 @@ function ema(arr, n) {
 }
 
 function calcRsi(arr, n) {
+    if (_W) return _wf(_W.rsi(Float64Array.from(arr.map(function(v){return v==null?NaN:v;})), n||14));
     n = n || 14;
     var out = new Array(arr.length).fill(null);
     var ag = 0, al = 0;
@@ -425,6 +443,13 @@ function calcRsi(arr, n) {
 }
 
 function calcMacd(closes, fast, slow, sig) {
+    if (_W) {
+        var raw = _W.macd_line(Float64Array.from(closes.map(function(v){return v==null?NaN:v;})), fast||12, slow||26, sig||9);
+        var n = closes.length;
+        var m = new Array(n), s = new Array(n);
+        for (var i = 0; i < n; i++) { m[i] = isNaN(raw[i*3]) ? null : raw[i*3]; s[i] = isNaN(raw[i*3+1]) ? null : raw[i*3+1]; }
+        return { macd: m, signal: s };
+    }
     var fEma = ema(closes, fast);
     var sEma = ema(closes, slow);
     var macdLine = closes.map(function (_, i) {
@@ -455,6 +480,12 @@ function donchian(closes, n) {
 }
 
 function bollinger(arr, n, mult) {
+    if (_W) {
+        var raw = _W.bollinger_bands(Float64Array.from(arr.map(function(v){return v==null?NaN:v;})), n||20, mult||2);
+        return Array.from({length: arr.length}, function(_, i) {
+            return isNaN(raw[i*3]) ? null : {upper: raw[i*3], middle: raw[i*3+1], lower: raw[i*3+2]};
+        });
+    }
     mult = mult || 2.0;
     var out = new Array(arr.length).fill(null);
     for (var i = n - 1; i < arr.length; i++) {
@@ -465,6 +496,32 @@ function bollinger(arr, n, mult) {
         for (var j = 0; j < n; j++) vsum += (arr[i - j] - mean) * (arr[i - j] - mean);
         var std = Math.sqrt(vsum / n);
         out[i] = { upper: mean + mult * std, middle: mean, lower: mean - mult * std };
+    }
+    return out;
+}
+
+function atr(candles, period) {
+    if (_W) {
+        var h = Float64Array.from(candles.map(function(c){return c.high;}));
+        var l = Float64Array.from(candles.map(function(c){return c.low;}));
+        var c2 = Float64Array.from(candles.map(function(c){return c.close;}));
+        return _wf(_W.atr_values(h, l, c2, period||14));
+    }
+    period = period || 14;
+    var n = candles.length;
+    var out = new Array(n).fill(null);
+    if (n < period) return out;
+    var tr = candles.map(function(c, i) {
+        var hl = c.high - c.low;
+        if (i === 0) return hl;
+        var pc = candles[i-1].close;
+        return Math.max(hl, Math.abs(c.high - pc), Math.abs(c.low - pc));
+    });
+    var sum = 0;
+    for (var i = 0; i < period; i++) sum += tr[i];
+    out[period - 1] = sum / period;
+    for (var i = period; i < n; i++) {
+        out[i] = (out[i-1] * (period - 1) + tr[i]) / period;
     }
     return out;
 }
