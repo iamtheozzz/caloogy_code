@@ -1084,7 +1084,9 @@ function quantClearChart() {
     Q.series.bbUpper.setData(empty);
     Q.series.bbMiddle.setData(empty);
     Q.series.bbLower.setData(empty);
-    if (Q.charts.candle) Q.charts.candle.timeScale().fitContent();
+    if (Q.charts.candle && Q.bar !== '1s' && Q.bar !== '1min') {
+        Q.charts.candle.timeScale().fitContent();
+    }
 }
 
 function quantRenderAll(bt) {
@@ -1266,10 +1268,13 @@ function _startLiveCandles() {
                 if (Q.series.candle) Q.series.candle.update(pt);
                 if (bar === '1s' && Q.candles.length > 500) Q.candles = Q.candles.slice(-500);
             }
-            // First candle: hide loading overlay and fit time scale
+            // First candle: hide loading overlay, set compact spacing for live view
             if (isFirst) {
                 showLoading(false);
-                if (Q.charts.candle) Q.charts.candle.timeScale().fitContent();
+                if (Q.charts.candle) {
+                    Q.charts.candle.timeScale().applyOptions({ barSpacing: 4, rightOffset: 8 });
+                    Q.charts.candle.timeScale().scrollToRealTime();
+                }
             }
         } catch {}
     };
