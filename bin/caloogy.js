@@ -429,69 +429,10 @@ async function alertsCLI() {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 // ── Optional extension builder (caloogy --build) ─────────────────────────────
-async function buildExtensions(pkgRoot) {
+function buildExtensions(pkgRoot) {
     const { spawnSync } = require('child_process');
-
-    function run(label, cmd, args, cwd) {
-        process.stdout.write(`  ${K2}▸${RESET} ${label}… `);
-        const r = spawnSync(cmd, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], shell: false });
-        if (r.error && r.error.code === 'ENOENT') {
-            console.log(`${DIM}skipped (${cmd} not found)${RESET}`);
-            return false;
-        }
-        if (r.status !== 0) {
-            console.log(`${'\x1b[31m'}failed${RESET}`);
-            const err = (r.stderr || r.stdout || Buffer.alloc(0)).toString().trim();
-            if (err) console.log(`    ${DIM}${err.split('\n').slice(-3).join('\n    ')}${RESET}`);
-            return false;
-        }
-        console.log(`${K3}done${RESET}`);
-        return true;
-    }
-
-    console.log(`\n  ${BOLD}Building optional extensions${RESET}\n`);
-
-    // 1. Go collector
-    const collectorDir = path.join(pkgRoot, 'collector');
-    if (fs.existsSync(path.join(collectorDir, 'go.mod'))) {
-        run('Go: tidy deps',      'go', ['mod', 'tidy'],                              collectorDir);
-        run('Go: build collector','go', ['build', '-o', 'caloogy-collector', '.'],    collectorDir);
-    } else {
-        console.log(`  ${DIM}▸ Go collector: not found, skipping${RESET}`);
-    }
-
-    // 2. Rust backtest engine (maturin)
-    const engineDir = path.join(pkgRoot, 'engine');
-    if (fs.existsSync(path.join(engineDir, 'Cargo.toml'))) {
-        // ensure maturin is available
-        const hasMaturin = !spawnSync('maturin', ['--version'], { stdio: 'ignore', shell: false }).error;
-        if (!hasMaturin) {
-            process.stdout.write(`  ${K2}▸${RESET} Rust engine: installing maturin… `);
-            const pip = spawnSync('pip3', ['install', 'maturin', '--quiet'], { stdio: 'inherit', shell: false });
-            console.log(pip.status === 0 ? `${K3}done${RESET}` : `${'\x1b[31m'}failed${RESET}`);
-        }
-        run('Rust: build engine', 'maturin', ['develop', '--release'], engineDir);
-    } else {
-        console.log(`  ${DIM}▸ Rust engine: not found, skipping${RESET}`);
-    }
-
-    // 3. WASM indicators
-    const wasmDir = path.join(pkgRoot, 'wasm');
-    if (fs.existsSync(path.join(wasmDir, 'Cargo.toml'))) {
-        const hasWasmPack = !spawnSync('wasm-pack', ['--version'], { stdio: 'ignore', shell: false }).error;
-        if (!hasWasmPack) {
-            process.stdout.write(`  ${K2}▸${RESET} WASM: installing wasm-pack… `);
-            const r = spawnSync('cargo', ['install', 'wasm-pack'], { stdio: 'inherit', shell: false });
-            console.log(r.status === 0 ? `${K3}done${RESET}` : `${'\x1b[31m'}failed${RESET}`);
-        }
-        run('WASM: build indicators', 'wasm-pack',
-            ['build', '--target', 'web', '--out-dir', '../public/wasm', '--no-typescript'],
-            wasmDir);
-    } else {
-        console.log(`  ${DIM}▸ WASM: not found, skipping${RESET}`);
-    }
-
-    console.log(`\n  ${K3}Build complete.${RESET} Run ${BOLD}caloogy${RESET} to start.\n`);
+    const script = path.join(pkgRoot, 'scripts', 'build.sh');
+    spawnSync('bash', [script], { stdio: 'inherit', shell: false });
 }
 
 async function main() {
@@ -514,7 +455,7 @@ async function main() {
     const chatMode  = args.includes('--chat')        || args.includes('-c');
     const buildMode = args.includes('--build')       || args.includes('-b');
 
-    if (buildMode) { await buildExtensions(PKG_ROOT); return; }
+    if (buildMode) { buildExtensions(PKG_ROOT); return; }
 
     if (alertMode) { await alertsCLI(); return; }
 

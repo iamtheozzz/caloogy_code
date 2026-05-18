@@ -54,6 +54,8 @@ After the global install, run this once to compile the optional performance modu
 
 ```bash
 caloogy --build
+# or equivalently
+bash scripts/build.sh
 ```
 
 **Prerequisites for each module:**
