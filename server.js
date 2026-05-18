@@ -834,7 +834,7 @@ function startServer(cfg) {
         } catch (e) { res.status(500).json({ error: e.message }); }
     });
 
-    app.post('/api/db/sync-default', async (req, res) => {
+    app.get('/api/db/sync-default', async (req, res) => {
         const CRYPTO  = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
         const STOCKS  = ['AAPL', 'TSLA', 'GOOGL', 'NVDA'];
         const INTERVALS = ['1H', '4H', '1D'];

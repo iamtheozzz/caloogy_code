@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Add common tool install paths that may be missing when run outside a login shell
+export PATH="$PATH:$HOME/.cargo/bin:/usr/local/go/bin:/opt/homebrew/bin:/usr/local/bin"
+
 GREEN='\033[0;32m'
 DIM='\033[2m'
 BOLD='\033[1m'
