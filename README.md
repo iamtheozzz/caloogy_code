@@ -48,6 +48,24 @@ npm install -g https://github.com/iamtheozzz/caloogy_code/archive/refs/heads/mai
 caloogy
 ```
 
+#### Optional: build native extensions
+
+After the global install, run this once to compile the optional performance modules (Go data collector, Rust backtest engine, WASM indicators):
+
+```bash
+caloogy --build
+```
+
+**Prerequisites for each module:**
+
+| Module | Requires |
+|--------|----------|
+| Go live data collector | [Go 1.21+](https://go.dev/dl/) |
+| Rust backtest engine | [Rust](https://rustup.rs/) + Python 3 (`pip3 install maturin` auto-attempted) |
+| WASM indicators | Rust + `wasm-pack` (`cargo install wasm-pack` auto-attempted) |
+
+All three are **optional** — the app runs without them, falling back to the built-in implementations. Install only what you want.
+
 ### Uninstall
 
 ```bash
@@ -105,6 +123,7 @@ caloogy -r
 | `--reconfigure`, `-r` | Re-run setup to change provider, API key, or email |
 | `--alerts`, `-a` | Open the alert manager in the terminal |
 | `--chat`, `-c` | Start the terminal AI agent (manage alerts + export CSV with natural language) |
+| `--build`, `-b` | Compile optional native extensions (Go collector, Rust engine, WASM indicators) |
 
 ---
 
