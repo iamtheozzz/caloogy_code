@@ -554,6 +554,20 @@ export PATH="$(npm prefix -g)/bin:$PATH"
 
 **Browser doesn't open automatically** — navigate manually to the URL printed in the terminal (e.g. `http://localhost:3000`).
 
+**1S / 1MIN chart shows "Waiting for live data…"** — the high-frequency chart requires the Go collector to be built and running. Follow these steps:
+
+1. Install Go ([go.dev/dl](https://go.dev/dl/) or `brew install go`) and Rust (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
+2. Build the extensions:
+   ```bash
+   caloogy --build
+   ```
+3. Start the collector in a separate terminal (keep it running alongside `caloogy`):
+   ```bash
+   ./collector/caloogy-collector
+   ```
+
+Once the collector is running, switch to any BTC / ETH / SOL chart and select **1S** or **1MIN** — live candles will start appearing automatically.
+
 ---
 
 ## License
