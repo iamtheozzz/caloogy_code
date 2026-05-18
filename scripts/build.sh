@@ -37,7 +37,18 @@ if [ -f "$ROOT/engine/Cargo.toml" ]; then
     if command -v cargo &>/dev/null; then
         if ! command -v maturin &>/dev/null; then
             echo -n "  ▸ Installing maturin… "
-            pip3 install maturin --quiet && ok "done" || { fail "failed"; }
+            # Try methods in order: brew → pipx → cargo → pip3 --break-system-packages
+            if command -v brew &>/dev/null && brew install maturin --quiet 2>/dev/null; then
+                ok "done (brew)"
+            elif command -v pipx &>/dev/null && pipx install maturin 2>/dev/null; then
+                ok "done (pipx)"
+            elif cargo install maturin --quiet 2>/dev/null; then
+                ok "done (cargo)"
+            elif pip3 install maturin --quiet --break-system-packages 2>/dev/null; then
+                ok "done (pip3)"
+            else
+                fail "failed — run: brew install maturin"
+            fi
         fi
         echo -n "  ▸ Rust: build engine… "
         (cd "$ROOT/engine" && maturin develop --release) && ok "done" || fail "failed"
