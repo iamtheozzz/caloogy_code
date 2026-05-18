@@ -1213,6 +1213,54 @@ function quantRenderAll(bt) {
 }
 
 /* ── UI binding ─────────────────────────────────────────────────────── */
+function _updateHfPills() {
+    var show = !isStockSymbol(Q.symbol) && !!_HF_SYMBOLS[Q.symbol];
+    document.querySelectorAll('#quantIntervalPills .qt-hf-pill').forEach(function (b) {
+        b.classList.toggle('quant-hidden', !show);
+    });
+    if (!show && (Q.bar === '1s' || Q.bar === '1min')) {
+        Q.bar = '1H';
+        document.querySelectorAll('#quantIntervalPills .quant-pill').forEach(function (b) {
+            b.classList.toggle('active', b.dataset.val === '1H');
+        });
+    }
+}
+
+function _startLiveCandles() {
+    if (_liveES) { _liveES.close(); _liveES = null; }
+    _livePending = null;
+    var sym = Q.symbol;
+    var bar = Q.bar;
+    _liveES = new EventSource('/api/live-candles');
+    _liveES.onmessage = function (e) {
+        try {
+            var c = JSON.parse(e.data);
+            if (c.symbol !== sym || c.interval !== bar) return;
+            var pt = { time: Math.floor(c.ts / 1000), open: c.open, high: c.high, low: c.low, close: c.close };
+            if (!c.confirmed) {
+                _livePending = pt;
+                if (Q.series.candle) Q.series.candle.update(pt);
+            } else {
+                _livePending = null;
+                var last = Q.candles.length && Q.candles[Q.candles.length - 1];
+                if (last && last.time === pt.time) {
+                    Q.candles[Q.candles.length - 1] = pt;
+                } else {
+                    Q.candles.push(pt);
+                }
+                if (Q.series.candle) Q.series.candle.update(pt);
+                if (bar === '1s' && Q.candles.length > 500) Q.candles = Q.candles.slice(-500);
+            }
+        } catch {}
+    };
+    _liveES.onerror = function () {};
+}
+
+function _stopLiveCandles() {
+    if (_liveES) { _liveES.close(); _liveES = null; }
+    _livePending = null;
+}
+
 function quantBindUI() {
     // Symbol pills (toolbar + extended panel + stocks)
     var _symSel = '#quantSymbolPills .quant-pill, #quantExtraSymbolPills .quant-pill';
@@ -1226,67 +1274,6 @@ function quantBindUI() {
             quantFetch();
         });
     });
-
-    // Show/hide 1S/1MIN pills depending on whether the current symbol supports live streaming
-    function _updateHfPills() {
-        var show = !isStockSymbol(Q.symbol) && !!_HF_SYMBOLS[Q.symbol];
-        document.querySelectorAll('#quantIntervalPills .qt-hf-pill').forEach(function (b) {
-            b.classList.toggle('quant-hidden', !show);
-        });
-        // If current bar is HF but symbol no longer supports it, fall back to 1H
-        if (!show && (Q.bar === '1s' || Q.bar === '1min')) {
-            Q.bar = '1H';
-            document.querySelectorAll('#quantIntervalPills .quant-pill').forEach(function (b) {
-                b.classList.toggle('active', b.dataset.val === '1H');
-            });
-        }
-    }
-
-    // Start SSE subscription for live candle updates (1s / 1min)
-    function _startLiveCandles() {
-        if (_liveES) { _liveES.close(); _liveES = null; }
-        _livePending = null;
-        var sym = Q.symbol;
-        var bar = Q.bar;
-        _liveES = new EventSource('/api/live-candles');
-        _liveES.onmessage = function (e) {
-            try {
-                var c = JSON.parse(e.data);
-                if (c.symbol !== sym || c.interval !== bar) return;
-                var pt = { time: Math.floor(c.ts / 1000), open: c.open, high: c.high, low: c.low, close: c.close };
-                if (!c.confirmed) {
-                    // Live update: replace or set pending bar
-                    _livePending = pt;
-                    var arr = Q.candles.slice();
-                    if (arr.length && arr[arr.length - 1].time === pt.time) {
-                        arr[arr.length - 1] = pt;
-                    } else {
-                        arr.push(pt);
-                    }
-                    if (Q.series.candle) Q.series.candle.update(pt);
-                } else {
-                    // Confirmed: finalize
-                    _livePending = null;
-                    var last = Q.candles.length && Q.candles[Q.candles.length - 1];
-                    if (last && last.time === pt.time) {
-                        Q.candles[Q.candles.length - 1] = pt;
-                    } else {
-                        Q.candles.push(pt);
-                    }
-                    if (Q.series.candle) Q.series.candle.update(pt);
-                    // Trim to 500 bars max for 1s to avoid memory growth
-                    if (bar === '1s' && Q.candles.length > 500) Q.candles = Q.candles.slice(-500);
-                }
-            } catch {}
-        };
-        _liveES.onerror = function () { /* Go collector not running — silent */ };
-    }
-
-    // Stop live SSE when switching away from HF intervals
-    function _stopLiveCandles() {
-        if (_liveES) { _liveES.close(); _liveES = null; }
-        _livePending = null;
-    }
 
     // Interval pills
     document.querySelectorAll('#quantIntervalPills .quant-pill').forEach(function (btn) {

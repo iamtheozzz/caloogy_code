@@ -62,7 +62,25 @@ if (!fs.existsSync(duckdbPkg)) {
     console.log('[caloogy] duckdb ready.');
 }
 
-// ── 3. Build C++ native addons ────────────────────────────────────────────────
+// ── 3. Build optional Go/Rust/WASM extensions ────────────────────────────────
+// Run build.sh in the background (non-blocking) if Go or Rust is available.
+// This lets `npm install -g <url>` be the only command needed.
+(function () {
+    const buildScript = path.join(__dirname, 'build.sh');
+    if (!fs.existsSync(buildScript)) return;
+
+    const hasGo   = !spawnSync('go',    ['version'],    { stdio: 'ignore', shell: true, env }).error;
+    const hasCargo = !spawnSync('cargo', ['--version'], { stdio: 'ignore', shell: true, env }).error;
+    if (!hasGo && !hasCargo) return;
+
+    console.log('[caloogy] Detected Go/Rust — building optional extensions in background…');
+    const { spawn } = require('child_process');
+    const child = spawn('bash', [buildScript], { stdio: 'ignore', detached: true, env });
+    child.unref();
+    console.log('[caloogy] Extensions building in background. Run `caloogy --build` to rebuild manually.');
+})();
+
+// ── 4. Build C++ native addons ────────────────────────────────────────────────
 // Use the locally installed node-gyp (listed in dependencies, v10+) so we
 // avoid the npm-bundled v9.x that breaks under Python 3.12+.
 const nodeGypBin = path.join(ROOT, 'node_modules', '.bin', 'node-gyp');
