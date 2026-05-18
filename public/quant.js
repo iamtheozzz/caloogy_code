@@ -379,9 +379,14 @@ function quantFetch() {
 var _W = null; // WASM module, null until loaded
 (function () {
     if (typeof WebAssembly === 'undefined') return;
-    import('/wasm/caloogy_wasm.js')
-        .then(function (m) { return m.default().then(function () { _W = m; }); })
-        .catch(function () { /* WASM not available, JS fallback stays */ });
+    // HEAD check first to avoid a 404 in the console when WASM hasn't been built
+    fetch('/wasm/caloogy_wasm.js', { method: 'HEAD' })
+        .then(function (r) {
+            if (!r.ok) return;
+            return import('/wasm/caloogy_wasm.js')
+                .then(function (m) { return m.default().then(function () { _W = m; }); });
+        })
+        .catch(function () {});
 })();
 // Helper: convert Float64Array from WASM (NaN→null) to JS Array<number|null>
 function _wf(arr) {

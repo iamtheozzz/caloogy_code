@@ -437,7 +437,9 @@ function buildExtensions(pkgRoot) {
 
 function hasCmd(cmd) {
     const { spawnSync } = require('child_process');
-    return !spawnSync(cmd, ['--version'], { stdio: 'ignore', shell: false }).error;
+    // Use shell:true so PATH includes ~/.cargo/bin, /usr/local/go/bin, etc.
+    const r = spawnSync(cmd, ['--version'], { stdio: 'ignore', shell: true });
+    return r.status === 0 || (r.error == null && r.status !== null);
 }
 
 async function maybeOfferBuild(pkgRoot) {
