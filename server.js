@@ -997,12 +997,14 @@ function startServer(cfg) {
             lines.filter(Boolean).forEach(line => {
                 try {
                     const bar = JSON.parse(line);
-                    // write to DuckDB (non-blocking)
-                    db.upsertCandles(bar.symbol, bar.interval, [{
-                        ts: bar.ts, open: bar.open, high: bar.high,
-                        low: bar.low, close: bar.close, volume: bar.volume,
-                    }], 'live').catch(() => {});
-                    // push to browser SSE clients
+                    // only persist confirmed (closed) candles to DuckDB
+                    if (bar.confirmed !== false) {
+                        db.upsertCandles(bar.symbol, bar.interval, [{
+                            ts: bar.ts, open: bar.open, high: bar.high,
+                            low: bar.low, close: bar.close, volume: bar.volume,
+                        }], 'live').catch(() => {});
+                    }
+                    // always push to browser SSE clients (confirmed + live)
                     broadcastLive(bar);
                 } catch {}
             });

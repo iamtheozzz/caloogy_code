@@ -27,13 +27,20 @@ const (
 	reconnectIn = 3 * time.Second
 )
 
-// symbols maps our internal name → OKX instId.
+// symbols for standard intervals (1H/4H/1D).
 var symbols = []struct{ name, instId string }{
 	{"BTCUSDT", "BTC-USDT"},
 	{"ETHUSDT", "ETH-USDT"},
 	{"SOLUSDT", "SOL-USDT"},
 	{"BNBUSDT", "BNB-USDT"},
 	{"XRPUSDT", "XRP-USDT"},
+}
+
+// liveSymbols for high-frequency intervals (1s/1min) — BTC/ETH/SOL only.
+var liveSymbols = []struct{ name, instId string }{
+	{"BTCUSDT", "BTC-USDT"},
+	{"ETHUSDT", "ETH-USDT"},
+	{"SOLUSDT", "SOL-USDT"},
 }
 
 // intervals maps interval label → OKX channel name.
@@ -43,19 +50,26 @@ var intervals = []struct{ label, channel string }{
 	{"1D", "candle1D"},
 }
 
+// liveIntervals for high-frequency streaming.
+var liveIntervals = []struct{ label, channel string }{
+	{"1s",   "candle1s"},
+	{"1min", "candle1m"},
+}
+
 // ──────────────────────────────────────────────
 // Candle (output to Node.js)
 // ──────────────────────────────────────────────
 
 type Candle struct {
-	Symbol   string  `json:"symbol"`
-	Interval string  `json:"interval"`
-	Ts       int64   `json:"ts"`
-	Open     float64 `json:"open"`
-	High     float64 `json:"high"`
-	Low      float64 `json:"low"`
-	Close    float64 `json:"close"`
-	Volume   float64 `json:"volume"`
+	Symbol    string  `json:"symbol"`
+	Interval  string  `json:"interval"`
+	Ts        int64   `json:"ts"`
+	Open      float64 `json:"open"`
+	High      float64 `json:"high"`
+	Low       float64 `json:"low"`
+	Close     float64 `json:"close"`
+	Volume    float64 `json:"volume"`
+	Confirmed bool    `json:"confirmed"`
 }
 
 // ──────────────────────────────────────────────
@@ -95,7 +109,6 @@ func (h *Hub) broadcast(candle *Candle) {
 	data = append(data, '\n')
 
 	h.mu.Lock()
-	// Collect bad conns separately to avoid removing while iterating.
 	var dead []net.Conn
 	for c := range h.conns {
 		if _, err := c.Write(data); err != nil {
@@ -114,7 +127,6 @@ func (h *Hub) broadcast(candle *Candle) {
 // ──────────────────────────────────────────────
 
 func runSocketServer(ctx context.Context, hub *Hub) {
-	// Remove stale socket file if present.
 	_ = os.Remove(sockPath)
 
 	ln, err := net.Listen("unix", sockPath)
@@ -140,8 +152,6 @@ func runSocketServer(ctx context.Context, hub *Hub) {
 			}
 		}
 		hub.add(conn)
-		// Keep the conn alive; hub removes it on write failure.
-		// Drain any incoming bytes so the OS buffer doesn't fill up.
 		go func(c net.Conn) {
 			buf := make([]byte, 256)
 			for {
@@ -177,10 +187,10 @@ type okxMsg struct {
 }
 
 // ──────────────────────────────────────────────
-// Single WebSocket worker (one symbol + interval)
+// Single WebSocket worker
 // ──────────────────────────────────────────────
 
-func runWorker(ctx context.Context, hub *Hub, sym, instId, interval, channel string) {
+func runWorker(ctx context.Context, hub *Hub, sym, instId, interval, channel string, emitLive bool) {
 	tag := fmt.Sprintf("[%s/%s]", sym, interval)
 
 	for {
@@ -190,7 +200,7 @@ func runWorker(ctx context.Context, hub *Hub, sym, instId, interval, channel str
 		default:
 		}
 
-		if err := connectAndStream(ctx, hub, sym, instId, interval, channel, tag); err != nil {
+		if err := connectAndStream(ctx, hub, sym, instId, interval, channel, tag, emitLive); err != nil {
 			log.Printf("%s disconnected: %v — reconnecting in %s", tag, err, reconnectIn)
 		}
 
@@ -206,6 +216,7 @@ func connectAndStream(
 	ctx context.Context,
 	hub *Hub,
 	sym, instId, interval, channel, tag string,
+	emitLive bool,
 ) error {
 	dialer := websocket.DefaultDialer
 	conn, _, err := dialer.DialContext(ctx, okxWSURL, nil)
@@ -215,7 +226,6 @@ func connectAndStream(
 	defer conn.Close()
 	log.Printf("%s connected to OKX", tag)
 
-	// Subscribe.
 	msg := subMsg{
 		Op:   "subscribe",
 		Args: []subArg{{Channel: channel, InstId: instId}},
@@ -224,11 +234,9 @@ func connectAndStream(
 		return fmt.Errorf("subscribe: %w", err)
 	}
 
-	// Ping ticker.
 	pingTicker := time.NewTicker(pingEvery)
 	defer pingTicker.Stop()
 
-	// Read loop — run in a goroutine so we can also handle ping/ctx.
 	type readResult struct {
 		msgType int
 		data    []byte
@@ -264,7 +272,7 @@ func connectAndStream(
 			if r.msgType != websocket.TextMessage {
 				continue
 			}
-			handleMessage(r.data, hub, sym, interval, tag)
+			handleMessage(r.data, hub, sym, interval, tag, emitLive)
 		}
 	}
 }
@@ -273,10 +281,9 @@ func connectAndStream(
 // Message parsing
 // ──────────────────────────────────────────────
 
-func handleMessage(raw []byte, hub *Hub, sym, interval, tag string) {
+func handleMessage(raw []byte, hub *Hub, sym, interval, tag string, emitLive bool) {
 	var m okxMsg
 	if err := json.Unmarshal(raw, &m); err != nil {
-		// Could be a pong or event reply — ignore silently.
 		return
 	}
 	if len(m.Data) == 0 {
@@ -288,49 +295,35 @@ func handleMessage(raw []byte, hub *Hub, sym, interval, tag string) {
 		if len(row) < 9 {
 			continue
 		}
-		confirm := row[8]
-		if confirm != "1" {
-			// Bar not yet closed.
+		confirmed := row[8] == "1"
+		if !confirmed && !emitLive {
 			continue
 		}
 
 		ts, err := strconv.ParseInt(row[0], 10, 64)
 		if err != nil {
-			log.Printf("%s bad ts %q: %v", tag, row[0], err)
 			continue
 		}
-		open, err := strconv.ParseFloat(row[1], 64)
-		if err != nil {
-			continue
-		}
-		high, err := strconv.ParseFloat(row[2], 64)
-		if err != nil {
-			continue
-		}
-		low, err := strconv.ParseFloat(row[3], 64)
-		if err != nil {
-			continue
-		}
-		close_, err := strconv.ParseFloat(row[4], 64)
-		if err != nil {
-			continue
-		}
-		vol, err := strconv.ParseFloat(row[5], 64)
-		if err != nil {
-			continue
-		}
+		open, err  := strconv.ParseFloat(row[1], 64); if err != nil { continue }
+		high, err  := strconv.ParseFloat(row[2], 64); if err != nil { continue }
+		low, err   := strconv.ParseFloat(row[3], 64); if err != nil { continue }
+		close_, err := strconv.ParseFloat(row[4], 64); if err != nil { continue }
+		vol, err   := strconv.ParseFloat(row[5], 64); if err != nil { continue }
 
 		candle := &Candle{
-			Symbol:   sym,
-			Interval: interval,
-			Ts:       ts,
-			Open:     open,
-			High:     high,
-			Low:      low,
-			Close:    close_,
-			Volume:   vol,
+			Symbol:    sym,
+			Interval:  interval,
+			Ts:        ts,
+			Open:      open,
+			High:      high,
+			Low:       low,
+			Close:     close_,
+			Volume:    vol,
+			Confirmed: confirmed,
 		}
-		log.Printf("%s closed candle ts=%d close=%.4f", tag, ts, close_)
+		if confirmed {
+			log.Printf("%s confirmed ts=%d close=%.4f", tag, ts, close_)
+		}
 		hub.broadcast(candle)
 	}
 }
@@ -348,17 +341,28 @@ func main() {
 
 	hub := newHub()
 
-	// Start Unix socket server.
 	go runSocketServer(ctx, hub)
 
-	// Start one goroutine per symbol × interval.
 	var wg sync.WaitGroup
+
+	// Standard intervals (1H/4H/1D) — all 5 symbols, confirmed only.
 	for _, sym := range symbols {
 		for _, iv := range intervals {
 			wg.Add(1)
 			go func(sym struct{ name, instId string }, iv struct{ label, channel string }) {
 				defer wg.Done()
-				runWorker(ctx, hub, sym.name, sym.instId, iv.label, iv.channel)
+				runWorker(ctx, hub, sym.name, sym.instId, iv.label, iv.channel, false)
+			}(sym, iv)
+		}
+	}
+
+	// High-frequency intervals (1s/1min) — BTC/ETH/SOL only, emit live updates too.
+	for _, sym := range liveSymbols {
+		for _, iv := range liveIntervals {
+			wg.Add(1)
+			go func(sym struct{ name, instId string }, iv struct{ label, channel string }) {
+				defer wg.Done()
+				runWorker(ctx, hub, sym.name, sym.instId, iv.label, iv.channel, true)
 			}(sym, iv)
 		}
 	}
