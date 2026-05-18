@@ -379,10 +379,11 @@ function quantFetch() {
 var _W = null; // WASM module, null until loaded
 (function () {
     if (typeof WebAssembly === 'undefined') return;
-    // HEAD check first to avoid a 404 in the console when WASM hasn't been built
-    fetch('/wasm/caloogy_wasm.js', { method: 'HEAD' })
-        .then(function (r) {
-            if (!r.ok) return;
+    // Ask the server whether the WASM file exists to avoid a 404 console error
+    fetch('/api/db/status')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.wasmReady) return;
             return import('/wasm/caloogy_wasm.js')
                 .then(function (m) { return m.default().then(function () { _W = m; }); });
         })

@@ -444,7 +444,9 @@ function hasCmd(cmd) {
 
 async function maybeOfferBuild(pkgRoot) {
     const flagFile = path.join(os.homedir(), '.caloogy', 'build_prompted');
-    if (fs.existsSync(flagFile)) return;
+    // Re-prompt if package version changed since last prompt
+    const pkgVersion = (() => { try { return require(path.join(pkgRoot, 'package.json')).version; } catch { return '0'; } })();
+    if (fs.existsSync(flagFile) && fs.readFileSync(flagFile, 'utf8').trim() === pkgVersion) return;
 
     const hasGo   = hasCmd('go')    && fs.existsSync(path.join(pkgRoot, 'collector', 'go.mod'));
     const hasRust = hasCmd('cargo') && fs.existsSync(path.join(pkgRoot, 'engine', 'Cargo.toml'));
@@ -462,7 +464,7 @@ async function maybeOfferBuild(pkgRoot) {
     iface.close();
 
     fs.mkdirSync(path.dirname(flagFile), { recursive: true });
-    fs.writeFileSync(flagFile, '1');
+    fs.writeFileSync(flagFile, pkgVersion);
 
     const choice = answer.trim();
     if (choice === '1') {

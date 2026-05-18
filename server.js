@@ -773,7 +773,9 @@ function startServer(cfg) {
     app.get('/api/db/status', async (req, res) => {
         try {
             const meta = await db.listSyncMeta();
-            res.json({ meta, size: db.dbFileSize(), path: db.DB_PATH });
+            const wasmReady = require('fs').existsSync(
+                path.join(__dirname, 'public', 'wasm', 'caloogy_wasm.js'));
+            res.json({ meta, size: db.dbFileSize(), path: db.DB_PATH, wasmReady });
         } catch (e) { res.status(500).json({ error: e.message }); }
     });
 
@@ -847,23 +849,23 @@ function startServer(cfg) {
         const send = obj => { try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {} };
 
         const tasks = [];
-        for (const sym of CRYPTO) for (const iv of INTERVALS) tasks.push({ sym, iv, type: 'crypto' });
-        for (const sym of STOCKS)  for (const iv of INTERVALS) tasks.push({ sym, iv, type: 'stock'  });
+        for (const sym of CRYPTO) for (const iv of INTERVALS) tasks.push({ sym, iv });
+        for (const sym of STOCKS)  for (const iv of INTERVALS) tasks.push({ sym, iv });
 
+        const total = tasks.length;
         let done = 0;
-        for (const { sym, iv } of tasks) {
+
+        await Promise.all(tasks.map(async ({ sym, iv }) => {
             try {
                 const candles = await monitor.fetchCandles(sym, iv, 300);
                 const written = await db.upsertCandles(sym, iv, candles, 'api');
-                done++;
-                send({ type: 'progress', symbol: sym, interval: iv, written, done, total: tasks.length });
+                send({ type: 'progress', symbol: sym, interval: iv, written, done: ++done, total });
             } catch (e) {
-                done++;
-                send({ type: 'progress', symbol: sym, interval: iv, error: e.message, done, total: tasks.length });
+                send({ type: 'progress', symbol: sym, interval: iv, error: e.message, done: ++done, total });
             }
-        }
+        }));
 
-        send({ type: 'done', total: tasks.length });
+        send({ type: 'done', total });
         res.end();
     });
 
