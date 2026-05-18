@@ -3562,7 +3562,7 @@ function initDataManager() {
             if (sizeEl) sizeEl.textContent = 'DB: ' + (data.size || '—');
             var meta = data.meta || [];
             if (!meta.length) {
-                tableBody.innerHTML = '<tr><td colspan="7" class="qt-data-empty">No data yet. Upload a CSV or wait for monitor to sync alerts.</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="7" class="qt-data-empty">No data yet. Upload a CSV, add a price alert, or use the symbol sync below.</td></tr>';
                 return;
             }
             tableBody.innerHTML = meta.map(function(m) {
@@ -3580,7 +3580,10 @@ function initDataManager() {
                 '</tr>';
             }).join('');
         })
-        .catch(function() {});
+        .catch(function() {
+            tableBody.innerHTML = '<tr><td colspan="7" class="qt-data-empty" style="color:#f87171">Cannot reach server. Make sure <code>caloogy</code> is running.</td></tr>';
+            if (sizeEl) sizeEl.textContent = 'DB: —';
+        });
     }
 
     function showPanel() {
@@ -3710,7 +3713,12 @@ function initDataManager() {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             var meta = data.meta || [];
-            if (!meta.length) { syncBtn.disabled = false; syncBtn.textContent = '↻ Sync All'; return; }
+            if (!meta.length) {
+                syncBtn.disabled = false;
+                syncBtn.textContent = '↻ Sync All';
+                tableBody.innerHTML = '<tr><td colspan="7" class="qt-data-empty">No synced symbols found. Add a price alert or upload a CSV first.</td></tr>';
+                return;
+            }
             var apiItems = meta.filter(function(m) { return m.source === 'api'; });
             var promises = apiItems.map(function(m) {
                 return fetch('/api/db/sync', {
@@ -3729,6 +3737,7 @@ function initDataManager() {
         .catch(function() {
             syncBtn.disabled = false;
             syncBtn.textContent = '↻ Sync All';
+            tableBody.innerHTML = '<tr><td colspan="7" class="qt-data-empty" style="color:#f87171">Cannot reach server. Make sure <code>caloogy</code> is running.</td></tr>';
         });
     });
 
