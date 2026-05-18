@@ -3709,36 +3709,34 @@ function initDataManager() {
     syncBtn.addEventListener('click', function() {
         syncBtn.disabled = true;
         syncBtn.textContent = 'Syncing…';
-        fetch('/api/db/status')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var meta = data.meta || [];
-            if (!meta.length) {
-                syncBtn.disabled = false;
-                syncBtn.textContent = '↻ Sync All';
-                tableBody.innerHTML = '<tr><td colspan="7" class="qt-data-empty">No synced symbols found. Add a price alert or upload a CSV first.</td></tr>';
-                return;
-            }
-            var apiItems = meta.filter(function(m) { return m.source === 'api'; });
-            var promises = apiItems.map(function(m) {
-                return fetch('/api/db/sync', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ symbol: m.symbol, interval: m.interval }),
-                });
-            });
-            return Promise.all(promises);
-        })
-        .then(function() {
-            syncBtn.disabled = false;
-            syncBtn.textContent = '↻ Sync All';
-            loadStatus();
-        })
-        .catch(function() {
+        tableBody.innerHTML = '<tr><td colspan="7" class="qt-data-empty">Fetching default assets (BTC, ETH, SOL, AAPL, TSLA, GOOGL, NVDA)…</td></tr>';
+
+        var es = new EventSource('/api/db/sync-default');
+        es.onmessage = function(e) {
+            try {
+                var msg = JSON.parse(e.data);
+                if (msg.type === 'progress') {
+                    var pct = Math.round(msg.done / msg.total * 100);
+                    syncBtn.textContent = 'Syncing… ' + pct + '%';
+                    tableBody.innerHTML = '<tr><td colspan="7" class="qt-data-empty">' +
+                        (msg.error
+                            ? 'Skipped ' + msg.symbol + '/' + msg.interval + ': ' + msg.error
+                            : 'Synced ' + msg.symbol + '/' + msg.interval + ' — ' + msg.written + ' candles') +
+                        ' (' + msg.done + '/' + msg.total + ')</td></tr>';
+                } else if (msg.type === 'done') {
+                    es.close();
+                    syncBtn.disabled = false;
+                    syncBtn.textContent = '↻ Sync All';
+                    loadStatus();
+                }
+            } catch {}
+        };
+        es.onerror = function() {
+            es.close();
             syncBtn.disabled = false;
             syncBtn.textContent = '↻ Sync All';
             tableBody.innerHTML = '<tr><td colspan="7" class="qt-data-empty" style="color:#f87171">Cannot reach server. Make sure <code>caloogy</code> is running.</td></tr>';
-        });
+        };
     });
 
     sqlRun.addEventListener('click', function() {

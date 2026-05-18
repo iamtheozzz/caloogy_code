@@ -834,6 +834,39 @@ function startServer(cfg) {
         } catch (e) { res.status(500).json({ error: e.message }); }
     });
 
+    app.post('/api/db/sync-default', async (req, res) => {
+        const CRYPTO  = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+        const STOCKS  = ['AAPL', 'TSLA', 'GOOGL', 'NVDA'];
+        const INTERVALS = ['1H', '4H', '1D'];
+
+        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
+        const send = obj => { try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {} };
+
+        const tasks = [];
+        for (const sym of CRYPTO) for (const iv of INTERVALS) tasks.push({ sym, iv, type: 'crypto' });
+        for (const sym of STOCKS)  for (const iv of INTERVALS) tasks.push({ sym, iv, type: 'stock'  });
+
+        let done = 0;
+        for (const { sym, iv } of tasks) {
+            try {
+                const candles = await monitor.fetchCandles(sym, iv, 300);
+                const written = await db.upsertCandles(sym, iv, candles, 'api');
+                done++;
+                send({ type: 'progress', symbol: sym, interval: iv, written, done, total: tasks.length });
+            } catch (e) {
+                done++;
+                send({ type: 'progress', symbol: sym, interval: iv, error: e.message, done, total: tasks.length });
+            }
+        }
+
+        send({ type: 'done', total: tasks.length });
+        res.end();
+    });
+
     app.post('/api/db/query', async (req, res) => {
         const { sql } = req.body || {};
         if (!sql) return res.status(400).json({ error: 'sql required' });
